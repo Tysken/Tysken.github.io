@@ -100,7 +100,7 @@ int main()
     loop = [&]
     {
         // move a vertex
-        const uint32_t milliseconds_since_start = SDL_GetTicks();
+        const uint32_t ms = SDL_GetTicks();
         const uint32_t milliseconds_per_loop = 3000;
 
         // Clear the window and make it all black
@@ -109,9 +109,9 @@ int main()
         
 		rendTexture.lock();
 
-        for(int y=0;y<100;y++){
-            for(int x=0;x<100;x++){
-                Uint32 rgb = x^y;
+        for(int y=0;y<rendTexture.h;y++){
+            for(int x=0;x<rendTexture.w;x++){
+                Uint32 rgb = (x*4-ms/30)^(y*4-ms/30);
                 rendTexture.pixels[x + y*rendTexture.w] = rgb;	
             }
         }
@@ -119,19 +119,20 @@ int main()
 
 		rendTexture.lock();
 
-        for(int y=0;y<100;y++){
-            for(int x=0;x<100;x++){
-                Uint32 rgb = x^y;
-                hudTexture.pixels[x + y*rendTexture.w] = rgb;	
+        for(int y=0;y<hudTexture.h;y++){
+            for(int x=0;x<hudTexture.w;x++){
+                Uint32 rgb = x*1000;
+				if(y<600) rgb = 0;
+                hudTexture.pixels[x + y*hudTexture.w] = rgb;	
             }
         }
     	rendTexture.unlock();
         
         SDL_Rect test;
         test.x = 0;
-        test.y = 600;
+        test.y = 0;
         test.w = 600;
-        test.h = 200;
+        test.h = 600;
 
             
         SDL_RenderCopy(renderer,rendTexture.Texture,NULL,&test); //copy screen texture to renderer
