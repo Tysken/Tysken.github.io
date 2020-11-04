@@ -9,10 +9,10 @@
 SDL_Window * window;
 SDL_Renderer * renderer;
 
-const int windowSizeX = 1000;
-const int windowSizeY = 600;
-const int rendererSizeX = 700;
-const int rendererSizeY = 700;
+const int windowSizeX = 600;
+const int windowSizeY = 800;
+const int rendererSizeX = 600;
+const int rendererSizeY = 600;
 
 class texture{
 public:
@@ -104,7 +104,7 @@ int main()
         const uint32_t milliseconds_per_loop = 3000;
 
         // Clear the window and make it all black
-        SDL_SetRenderDrawColor( renderer, 0, 100, 0, 255 );
+        SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
         SDL_RenderClear( renderer );
         
 		rendTexture.lock();
@@ -116,16 +116,26 @@ int main()
             }
         }
     	rendTexture.unlock();
+
+		rendTexture.lock();
+
+        for(int y=0;y<100;y++){
+            for(int x=0;x<100;x++){
+                Uint32 rgb = x^y;
+                hudTexture.pixels[x + y*rendTexture.w] = rgb;	
+            }
+        }
+    	rendTexture.unlock();
         
         SDL_Rect test;
         test.x = 0;
-        test.y = 0;
-        test.w = 700;
-        test.h = 600;
+        test.y = 600;
+        test.w = 600;
+        test.h = 200;
 
             
-//        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,&test); //copy screen texture to renderer
-        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,NULL); //copy hud texture to renderer
+        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,&test); //copy screen texture to renderer
+        SDL_RenderCopy(renderer,hudTexture.Texture,NULL,NULL); //copy hud texture to renderer
 
         // Render the changes above
         SDL_RenderPresent( renderer);
