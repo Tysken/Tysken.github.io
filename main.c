@@ -603,9 +603,9 @@ void init(){
 	map.h = MAPH;
 
 	cam.x = 150;
-	cam.y = -300;
-	cam.rot = 0;
-	cam.zoom = 0.05;
+	cam.y = -200;
+	cam.rot = 3.14f/2;
+	cam.zoom = 0.3;
 	for(int y=0;y<map.h;y++){
 		for(int x=0;x<map.w;x++){
 
@@ -613,8 +613,8 @@ void init(){
 		}
 	}
 
-	cursor.amount = 0.2;
-	cursor.radius = 2;
+	cursor.amount = 0.3;
+	cursor.radius = 3;
 
 	loadFont("assets/VictoriaBold.png"); //load font lol
 
@@ -726,7 +726,7 @@ void process(){
 	//add water
 	int x = map.w - 10;
 	int y = 10;
-	map.water[4+x*5+y*map.w*5] += 10.f;
+	map.water[4+x*5+y*map.w*5] += 50.f;
 
 	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
 }
