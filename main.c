@@ -1,8 +1,12 @@
 #include "main.h"
 
+
+
 SDL_Window * window;
 SDL_Renderer * renderer;
 
+uint32_t g_canvasSizeX;
+uint32_t g_canvasSizeY;
 
 
 uint32_t g_time_ms;
@@ -296,7 +300,7 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 	
 	
 	//init some variables
-	Uint32 argb; //store color of Pixel that will be drawn
+	uint32_t argb; //store color of Pixel that will be drawn
 	int border=0; //used when skiping pixels to decide when at a edge of a tile that should be a darker shade
 	int dPixels = 1; //how many pixels are skipped to get to the next tile
 	
@@ -627,11 +631,12 @@ void updateInput(){
 	//update pos and state of mouse
 	input.mouse.state = SDL_GetMouseState(&input.mouse.x,&input.mouse.y);
 	//update mouse world pos
-	vec2f_t pos = screen2world(input.mouse.x,input.mouse.y);
+	float ratioX = (float)g_canvasSizeX / (float)windowSizeX;
+	cursor.screenX = input.mouse.x * ratioX - input.mouse.offsetX;
+	cursor.screenY = input.mouse.y;
+	vec2f_t pos = screen2world(cursor.screenX,cursor.screenY);
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
-	cursor.screenX = input.mouse.x;
-	cursor.screenY = input.mouse.y;
 	
 	if(input.mouse.state == SDL_BUTTON_LEFT){
 
@@ -757,14 +762,9 @@ void loop(){
 		renderHud();
 		SDL_UnlockTexture(hudTexture.Texture);
         
-        SDL_Rect test;
-        test.x = 0;
-        test.y = 0;
-        test.w = 600;
-        test.h = 600;
 
             
-        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,&test); //copy screen texture to renderer
+        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,NULL); //copy screen texture to renderer
         SDL_RenderCopy(renderer,hudTexture.Texture,NULL,NULL); //copy hud texture to renderer
 
         // Render the changes above
@@ -774,6 +774,32 @@ void loop(){
     
 }
 void main_loop() { loop(); }
+
+
+EM_BOOL on_canvassize_changed(int eventType, const void *reserved, void *userData)
+{
+	int w, h;
+	emscripten_get_canvas_element_size("#canvas", &w, &h);
+	double cssW, cssH;
+	emscripten_get_element_css_size(0, &cssW, &cssH);
+	printf("Canvas resized: WebGL RTT size: %dx%d, canvas CSS size: %02gx%02g\n", w, h, cssW, cssH);
+	// resize SDL window
+	SDL_SetWindowSize(window, w, h);
+
+	//uppdate mouse coordinate offset
+	if(cssW > cssH){
+		input.mouse.offsetX = ((int)cssW - w) / 2;
+		input.mouse.offsetY = 0;
+	}else{
+		input.mouse.offsetY = ((int)cssH - h) / 2;
+		input.mouse.offsetX = 0;
+	}
+	g_canvasSizeX = (int)cssW;
+	g_canvasSizeY = (int)cssH;
+
+	return 0;
+}
+
 
 int main()
 {
@@ -787,27 +813,44 @@ int main()
 	window = SDL_CreateWindow( "Server", 10, 10, windowSizeX, windowSizeY, 0 );
 	if ( window == NULL )	{}
 
+
 	renderer = SDL_CreateRenderer( window, -1, 0 );
 	if ( renderer == NULL )	{}
-	
 
-	// Set size of renderer 
+
+
+	// Set size of renderer
 	SDL_RenderSetLogicalSize( renderer, windowSizeX, windowSizeY );
 	//Set blend mode of renderer
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
 	// Set color of renderer to black
 	SDL_SetRenderDrawColor( renderer, 100, 0, 0, 255 );
-	
 	//init rendTexture
 	rendTexture.Texture = SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, rendTexture.w, rendTexture.h);
 	//init hudTexture as transparent
 	hudTexture.Texture = SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, hudTexture.w, hudTexture.h);
 	SDL_SetTextureBlendMode(hudTexture.Texture,SDL_BLENDMODE_BLEND);
-	
+
+
+	if (IS_FULLSCREEN){
+
+
+		EmscriptenFullscreenStrategy strategy;
+		memset(&strategy, 0, sizeof(strategy));
+		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_ASPECT;
+		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
+		strategy.canvasResizedCallback = on_canvassize_changed;
+		//emscripten_enter_soft_fullscreen("canvas", &strategy);
+		  EMSCRIPTEN_RESULT ret = emscripten_enter_soft_fullscreen("canvas", &strategy);
+		  printf("ret %d\n",ret);
+	}
+
+
 
 
     emscripten_set_main_loop(main_loop, 0, true);
 
     return EXIT_SUCCESS;
 }
+

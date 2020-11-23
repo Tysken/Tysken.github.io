@@ -3,11 +3,14 @@
 #include <stdbool.h>
 #include <math.h>
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #include <SDL.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
+
+#define IS_FULLSCREEN 1
 
 
 #define max(a,b) \
@@ -21,7 +24,7 @@
      _a < _b ? _a : _b; })
 
 #define windowSizeX  600
-#define windowSizeY  800
+#define windowSizeY  600
 #define rendererSizeX  600
 #define rendererSizeY  600
 
@@ -46,6 +49,8 @@ struct{
 	struct{
         int x;
         int y;
+        int offsetX; //an offset is needed if the html canvas size isn't 1:1 with the SDL window size
+        int offsetY;
 		uint32_t state;
 	}mouse;
 }input;
