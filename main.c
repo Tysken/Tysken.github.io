@@ -558,7 +558,7 @@ void render(){
 				uint32_t rgb = (255 << 16) | (255 << 8) | (255);
 				if(input.mouse.x-10 > 0 && input.mouse.x + 10 < rendTexture.w && 
 				   	input.mouse.y-10 > 0 && input.mouse.y + 10 < rendTexture.h ){
-						rendTexture.pixels[(input.mouse.x+x)+(input.mouse.y+y)*rendTexture.w] = rgb;
+						rendTexture.pixels[(cursor.screenX+x)+(cursor.screenY+y)*rendTexture.w] = rgb;
 				}
 			}
 		}
@@ -622,7 +622,7 @@ void init(){
 
 	loadFont("assets/VictoriaBold.png"); //load font lol
 
-	loadMap("assets/map.png");
+	loadMap("assets/boras.png");
 
 }
 
@@ -631,8 +631,13 @@ void updateInput(){
 	//update pos and state of mouse
 	input.mouse.state = SDL_GetMouseState(&input.mouse.x,&input.mouse.y);
 	//update mouse world pos
-	float ratioX = (float)g_canvasSizeX / (float)windowSizeX;
-	cursor.screenX = input.mouse.x * ratioX - input.mouse.offsetX;
+	float percentX = ((float)input.mouse.x / (float)windowSizeX);
+	float pixelsX = percentX * (float)g_canvasSizeX;
+
+	float ratioX =  (float)windowSizeX / (float)g_canvasSizeX;
+	float ratioY = (float)g_canvasSizeY / (float)windowSizeY;
+
+	cursor.screenX = input.mouse.x;
 	cursor.screenY = input.mouse.y;
 	vec2f_t pos = screen2world(cursor.screenX,cursor.screenY);
 	cursor.worldX  = pos.x;
@@ -733,7 +738,7 @@ void process(){
 	int y = 10;
 	map.water[4+x*5+y*map.w*5] += 50.f;
 
-	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+//	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
 }
 
 void loop(){
@@ -788,7 +793,7 @@ EM_BOOL on_canvassize_changed(int eventType, const void *reserved, void *userDat
 
 	//uppdate mouse coordinate offset
 	if(cssW > cssH){
-		input.mouse.offsetX = ((int)cssW - w) / 2;
+		input.mouse.offsetX = (float)((int)cssW - w) / (float)2;
 		input.mouse.offsetY = 0;
 	}else{
 		input.mouse.offsetY = ((int)cssH - h) / 2;
@@ -798,6 +803,33 @@ EM_BOOL on_canvassize_changed(int eventType, const void *reserved, void *userDat
 	g_canvasSizeY = (int)cssH;
 
 	return 0;
+}
+
+static inline const char *emscripten_event_type_to_string(int eventType) {
+  const char *events[] = { "(invalid)", "(none)", "keypress", "keydown", "keyup", "click", "mousedown", "mouseup", "dblclick", "mousemove", "wheel", "resize",
+    "scroll", "blur", "focus", "focusin", "focusout", "deviceorientation", "devicemotion", "orientationchange", "fullscreenchange", "pointerlockchange",
+    "visibilitychange", "touchstart", "touchend", "touchmove", "touchcancel", "gamepadconnected", "gamepaddisconnected", "beforeunload",
+    "batterychargingchange", "batterylevelchange", "webglcontextlost", "webglcontextrestored", "(invalid)" };
+  ++eventType;
+  if (eventType < 0) eventType = 0;
+  if (eventType >= sizeof(events)/sizeof(events[0])) eventType = sizeof(events)/sizeof(events[0])-1;
+  return events[eventType];
+}
+EM_BOOL mouse_callback(int eventType, const EmscriptenMouseEvent *e, void *userData)
+{
+  printf("%s, screen: (%ld,%ld), client: (%ld,%ld),%s%s%s%s button: %hu, buttons: %hu, movement: (%ld,%ld), target: (%ld, %ld)\n",
+    emscripten_event_type_to_string(eventType), e->screenX, e->screenY, e->clientX, e->clientY,
+    e->ctrlKey ? " CTRL" : "", e->shiftKey ? " SHIFT" : "", e->altKey ? " ALT" : "", e->metaKey ? " META" : "",
+    e->button, e->buttons, e->movementX, e->movementY, e->targetX, e->targetY);
+
+  if (e->screenX != 0 && e->screenY != 0 && e->clientX != 0 && e->clientY != 0 && e->targetX != 0 && e->targetY != 0)
+  {
+
+    //if (eventType == EMSCRIPTEN_EVENT_MOUSEMOVE && (e->movementX != 0 || e->movementY != 0)) gotMouseMove = 1;
+  }
+
+
+  return 0;
 }
 
 
@@ -846,11 +878,11 @@ int main()
 		  printf("ret %d\n",ret);
 	}
 
-
-
+	SDL_SetWindowSize(window, windowSizeX, windowSizeY);
+	emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, mouse_callback);
 
     emscripten_set_main_loop(main_loop, 0, true);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
 

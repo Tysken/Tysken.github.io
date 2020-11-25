@@ -10,7 +10,7 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
 
-#define IS_FULLSCREEN 1
+#define IS_FULLSCREEN 0
 
 
 #define max(a,b) \
@@ -73,8 +73,8 @@ struct{
 	int visibility[rendererSizeX*rendererSizeY];
 }cam;
 
-#define MAPW 256
-#define MAPH 256
+#define MAPW 2560
+#define MAPH 2560
 
 struct{
 	int w;
