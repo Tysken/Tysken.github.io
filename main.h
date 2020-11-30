@@ -73,8 +73,8 @@ struct{
 	int visibility[rendererSizeX*rendererSizeY];
 }cam;
 
-#define MAPW 2560
-#define MAPH 2560
+#define MAPW 512
+#define MAPH 512
 
 struct{
 	int w;
@@ -93,6 +93,9 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
     float* W = fluid;
     for(int y=1;y<MAPH-1;y++){
         for(int x=1;x<MAPW-1;x++){
+        	//if fluid flow to cell equals flow from cell (constant flow) then the cell does not need to be updated
+        	if((W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]+W[4+x*5+y*MAPW*5]) == 0)continue;
+
             W[0+x*5+y*MAPW*5] = max(W[0+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x+1)*5+y*MAPW*5]-T[(x+1)+y*MAPW])*dTime*A*g/l , 0.f); //höger
             W[1+x*5+y*MAPW*5] = max(W[1+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y-1)*MAPW*5]-T[(x)+(y-1)*MAPW])*dTime*A*g/l , 0.f); //upp
             W[2+x*5+y*MAPW*5] = max(W[2+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x-1)*5+y*MAPW*5]-T[(x-1)+y*MAPW])*dTime*A*g/l , 0.f); //vänster
@@ -131,7 +134,7 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
 
 Uint32 getpixel(SDL_Surface *surface, int x, int y);
 
-void loadMap(const char* path){
+void loadHeightMap(const char* path){
     int w = MAPW;
     int h = MAPH;
     SDL_Surface* bitmap = IMG_Load(path); 
@@ -145,7 +148,7 @@ void loadMap(const char* path){
         for(int x = 0; x < w; x++){
             Uint8 r,g,b;
             SDL_GetRGB(getpixel(bitmap,x,y),bitmap->format,&r,&g,&b);
-            map.stone[x+y*w]  = r/4+10;
+            map.stone[x+y*w]  = 70.f * (float)(r+g+b)/(float)(3 * 255) + 1.f;
             map.argb[x+y*w].r = r;
             map.argb[x+y*w].g = g;
             map.argb[x+y*w].b = b;
@@ -155,6 +158,32 @@ void loadMap(const char* path){
     SDL_UnlockSurface(bitmap);
     SDL_FreeSurface (bitmap);
 }
+
+
+void loadColorMap(const char* path){
+    int w = MAPW;
+    int h = MAPH;
+    SDL_Surface* bitmap = IMG_Load(path);
+    if(!bitmap){
+        printf("IMG_Load: %s\n", IMG_GetError());
+        return;
+    }
+    SDL_LockSurface(bitmap);
+
+    for(int y = 0; y < h; y++){
+        for(int x = 0; x < w; x++){
+            Uint8 r,g,b;
+            SDL_GetRGB(getpixel(bitmap,x,y),bitmap->format,&r,&g,&b);
+            map.argb[x+y*w].r = r;
+            map.argb[x+y*w].g = g;
+            map.argb[x+y*w].b = b;
+        }
+    }
+
+    SDL_UnlockSurface(bitmap);
+    SDL_FreeSurface (bitmap);
+}
+
 
 vec2f_t world2screen(float x, float y){
 	float sinAlpha = sin(cam.rot);
@@ -291,4 +320,55 @@ void print(sdlTexture* tex, char* str, int x, int y){
             }
         }
     }
+}
+
+
+void boxBlurT_4(float *source, float *target,int w, int h, int r){
+    float iarr = 1 / (float)(r+r+1);
+    for(int i=0; i<w; i++) {
+        int ti = i, li = ti, ri = ti+r*w;
+        float fv = source[ti], lv = source[ti+w*(h-1)], val = (r+1)*fv;
+        for(int j=0; j<r; j++) val += source[ti+j*w];
+        for(int j=0  ; j<=r ; j++) { val += source[ri] - fv     ;  target[ti] = round(val*iarr);  ri+=w; ti+=w; }
+        for(int j=r+1; j<h-r; j++) { val += source[ri] - source[li];  target[ti] = round(val*iarr);  li+=w; ri+=w; ti+=w; }
+        for(int j=h-r; j<h  ; j++) { val += lv      - source[li];  target[ti] = round(val*iarr);  li+=w; ti+=w; }
+    }
+}
+
+void boxBlurH_4(float *source, float *target,int w, int h, int r){
+    float iarr = 1 / (float)(r+r+1);
+    for(int i=0; i<h; i++) {
+        int ti = i*w, li = ti, ri = ti+r;
+        float fv = source[ti], lv = source[ti+w-1], val = (r+1)*fv;
+        for(int j=0; j<r; j++) val += source[ti+j];
+        for(int j=0  ; j<=r ; j++) { val += source[ri++] - fv       ;   target[ti++] = round(val*iarr); }
+        for(int j=r+1; j<w-r; j++) { val += source[ri++] - source[li++];   target[ti++] = round(val*iarr); }
+        for(int j=w-r; j<w  ; j++) { val += lv        - source[li++];   target[ti++] = round(val*iarr); }
+    }
+}
+
+void boxBlur_4 (float *source, float *target,int source_lenght, int w, int h, int r) {
+    for(int i=0; i<source_lenght; i++) target[i] = source[i];
+    boxBlurH_4(target, source, w, h, r);
+    boxBlurT_4(source, target, w, h, r);
+}
+
+void gaussBlur_4(float *source, float *target,int source_lenght, int w, int h, int r) {
+    int n = 3;
+	float bxs[n];
+	float wIdeal = sqrt((12*r*r/n)+1);  // Ideal averaging filter width
+    int wl = floor(wIdeal);  if(wl%2==0) wl--;
+    int wu = wl+2;
+
+    float mIdeal = (12*r*r - n*wl*wl - 4*n*wl - 3*n)/(-4*wl - 4);
+    float m = round(mIdeal);
+    // var sigmaActual = std::sqrt( (m*wl*wl + (n-m)*wu*wu - n)/12 );
+
+	for(int i=0; i<n;i++){
+		if(i<m){ bxs[i] = wl;}
+		else {   bxs[i] = wu;}
+	}
+    boxBlur_4 (source, target, source_lenght, w, h, (int)(bxs[0]-1)/2.f);
+    boxBlur_4 (target, source, source_lenght, w, h, (int)(bxs[1]-1)/2.f);
+    boxBlur_4 (source, target, source_lenght, w, h, (int)(bxs[2]-1)/2.f);
 }

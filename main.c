@@ -23,9 +23,113 @@ sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,wind
 
 
 
+float g_windowScaleX = 0.5f;
+float g_windowScaleY = 0.5f;
+
+void generate_shadowmap(){
+
+ //flush shadowmap
+	memset(map.shadow, 0, sizeof((map.shadow)));
 
 
+//		Calculate shadows by iterating over map diagonally like example below.
+//		------- Save the highest tileheight in diagonal and decrease by 1 each step.
+//		|6|3|1| If current tile is higher, save that one as new highest point.
+//		|8|5|2| If not then that tile is in shadow.
+//		|9|7|4|
+//		------- ONLY WORKS ON SQUARE MAPS!!!
 
+	int diagonalLines = (map.w + map.h) - 1;        //number of diagonal lines in map
+	int midPoint = (diagonalLines / 2) + 1; //number of the diagonal that crosses midpoint of map
+	int itemsInDiagonal = 0;                //stores number of tiles in a diagonal
+
+
+	for(int diagonal = 1;diagonal <= diagonalLines;diagonal++){
+		float terrainPeakHeight = 1;
+		int x,y;
+		if (diagonal <= midPoint) {
+			itemsInDiagonal++;
+			for (int item = 0; item < itemsInDiagonal; item++) {
+				y = (diagonal - item) - 1;
+				x = map.w-item-1;
+				terrainPeakHeight -= 0.5f;
+				if(terrainPeakHeight < map.stone[x+y*map.w]){
+					map.shadow[x+y*map.w] = -30;
+					terrainPeakHeight = map.stone[x+y*map.w];
+				}
+			}
+		} else {
+			itemsInDiagonal--;
+			for (int item = 0; item < itemsInDiagonal; item++) {
+				y = (map.h - 1) - item;
+				x = diagonalLines - diagonal - item;
+				terrainPeakHeight -= 0.5f;
+				if(terrainPeakHeight < map.stone[x+y*map.w]){
+					map.shadow[x+y*map.w] = -30;
+					terrainPeakHeight = map.stone[x+y*map.w];
+				}
+			}
+		}
+	}
+
+
+//ambient occlusion
+//Calculate ambient occlusion using a box filter, optimized with technique found here: http://blog.ivank.net/fastest-gaussian-blur.html#results
+
+	int r = 4;
+
+	for(int i=0; i<map.h; i++) {
+		int ti = i*map.w, li = ti, ri = ti+r;
+		float fv = map.stone[ti], lv = map.stone[ti+map.w-1], val = (r+1)*fv;
+		for(int j=0; j<r; j++) val += map.stone[ti+j];
+		for(int j=0  ; j<=r ; j++) {
+			val += map.stone[ri++] - fv       ;
+			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+			ti++;
+		}
+		for(int j=r+1; j<map.w-r; j++) { val += map.stone[ri++] - map.stone[li++];
+		map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+		ti++;
+		}
+		for(int j=map.w-r; j<map.w  ; j++) {
+			val += lv        - map.stone[li++];
+			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+			ti++;
+		}
+	}
+	for(int i=0; i<map.w; i++) {
+		int ti = i, li = ti, ri = ti+r*map.w;
+		float fv = map.stone[ti], lv = map.stone[ti+map.w*(map.h-1)], val = (r+1)*fv;
+		for(int j=0; j<r; j++) val += map.stone[ti+j*map.w];
+		for(int j=0  ; j<=r ; j++) { val += map.stone[ri] - fv     ;
+		map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+		ri+=map.w; ti+=map.w;
+		}
+		for(int j=r+1; j<map.h-r; j++) {
+			val += map.stone[ri] - map.stone[li];
+			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+			li+=map.w; ri+=map.w; ti+=map.w;
+		}
+		for(int j=map.h-r; j<map.h  ; j++) {
+			val += lv      - map.stone[li];
+			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+			li+=map.w; ti+=map.w;
+		}
+	}
+
+	//Add light sources
+	//Lava
+//	for(int i=0;i<map.w*map.h;i++){
+//		map.shadow[i] -= (short)(lavaHeight[i]);
+//	}
+
+	//smooth shadows
+	boxBlur_4(map.shadow,map.shadow,map.w*map.h,map.w,map.h,1);
+	//moother shadows
+	boxBlur_4(map.shadow,map.shadowSoft,map.w*map.h,map.w,map.h,4);
+
+
+}
 
 //update map data and stuff
 void updateData(){
@@ -101,7 +205,7 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade){
 					int newX = (x+(int)(upVec.x*i));
 					int newY = (y+(int)(upVec.y*i));
 					float caustic =  (map.water[4+(newX+1)*5+newY*map.w*5] - map.water[4+(newX-1)*5+newY*map.w*5] + map.stone[test2+1] - map.stone[test2-1] +
-					map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;	
+					map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;
 					if(seaFloorPosX <= 2 || seaFloorPosX >= map.w-2 || seaFloorPosY <= 2 || seaFloorPosY >= map.h-2) caustic = 0;
 					float foamShadow = 0;//map.foamLevel[test2] * 0.2;
 					underwaterFoam = max(min(underwaterFoam,100),0);
@@ -116,9 +220,9 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade){
 					}else{//interpolate between soft and no shadows
 						shadow = map.shadowSoft[test2] + (0 - map.shadowSoft[test2])*(min(map.water[4+(newX)*5+(newY)*map.w*5]/100.f,1.f));
 					}
-					r -= shadow;
-					g -= shadow;
-					b -= shadow;
+					r -= 0;//shadow;
+					g -= 0;//shadow;
+					b -= 0;//shadow;
 					break;
 				}
 				if(seaFloorPosX < 1 || seaFloorPosX >= map.w-1 || seaFloorPosY < 1 || seaFloorPosY >= map.h-1){
@@ -460,8 +564,8 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 
 void render(){
         for(int y=0;y<rendTexture.h;y++){
+			Uint32 rgb = (100) | (100) | (100);
             for(int x=0;x<rendTexture.w;x++){
-                Uint32 rgb = (x*4)^(y*4);
                 rendTexture.pixels[x + y*rendTexture.w] = rgb;	
             }
         }
@@ -618,11 +722,12 @@ void init(){
 	}
 
 	cursor.amount = 0.3;
-	cursor.radius = 3;
+	cursor.radius = 5;
 
 	loadFont("assets/VictoriaBold.png"); //load font lol
 
-	loadMap("assets/boras.png");
+	loadHeightMap("assets/mountain_height.png");
+	loadColorMap("assets/mountain_color.png");
 
 }
 
@@ -637,8 +742,8 @@ void updateInput(){
 	float ratioX =  (float)windowSizeX / (float)g_canvasSizeX;
 	float ratioY = (float)g_canvasSizeY / (float)windowSizeY;
 
-	cursor.screenX = input.mouse.x;
-	cursor.screenY = input.mouse.y;
+	cursor.screenX = (float)input.mouse.x * (float)g_windowScaleX;
+	cursor.screenY = (float)input.mouse.y * (float)g_windowScaleY;
 	vec2f_t pos = screen2world(cursor.screenX,cursor.screenY);
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
@@ -648,9 +753,9 @@ void updateInput(){
 		float radius = cursor.radius;
 		for(int j=-radius;j<=radius;j++){
 			for(int k=-radius;k<=radius;k++){
-//				map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){	
-					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms; 
+					map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+//					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 				}
 			}
 		}
@@ -734,75 +839,99 @@ void updateInput(){
 void process(){
 
 	//add water
-	int x = map.w - 10;
-	int y = 10;
-	map.water[4+x*5+y*map.w*5] += 50.f;
 
-//	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+	for(int y=2;y<map.h-2;y++){
+		float timeThingy = (float)g_time_ms;
+		if(map.stone[1+y*map.w] < 20.f){
+	//		map.water[4+1*5+y*map.w*5] += -4.f*cos((float)g_time_ms/4000.f)+4.f;
+		}
+	}
+
+	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+
+	static int timer_100ms = 0;
+	if(g_time_ms - timer_100ms > 100){
+		timer_100ms = g_time_ms;
+
+		generate_shadowmap();
+	}
+
 }
 
 void loop(){
 	
-		g_dtime_ms = g_time_ms; //backup time
-        g_time_ms = SDL_GetTicks(); //get time
-		g_dtime_ms = g_time_ms - g_dtime_ms; //get delta time
+	g_dtime_ms = g_time_ms; //backup time
+	g_time_ms = SDL_GetTicks(); //get time
+	g_dtime_ms = g_time_ms - g_dtime_ms; //get delta time
 
 	updateInput();
 
 	process();
+	// Clear the window and make it all black
+	SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
+	SDL_RenderClear( renderer );
 
-        // Clear the window and make it all black
-        SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
-        SDL_RenderClear( renderer );
-        
 //		rendTexture.lock();
-		SDL_LockTexture(rendTexture.Texture,NULL,&(rendTexture.mPixels), &(rendTexture.pitch));
-		rendTexture.pixels = (uint32_t*)rendTexture.mPixels;
-		render();
-		SDL_UnlockTexture(rendTexture.Texture);
+	SDL_LockTexture(rendTexture.Texture,NULL,&(rendTexture.mPixels), &(rendTexture.pitch));
+	rendTexture.pixels = (uint32_t*)rendTexture.mPixels;
+	render();
+	SDL_UnlockTexture(rendTexture.Texture);
 //    	rendTexture.unlock();
 
-		SDL_LockTexture(hudTexture.Texture,NULL,&(hudTexture.mPixels), &(hudTexture.pitch));
-		hudTexture.pixels = (uint32_t*)hudTexture.mPixels;
-		renderHud();
-		SDL_UnlockTexture(hudTexture.Texture);
-        
+	SDL_LockTexture(hudTexture.Texture,NULL,&(hudTexture.mPixels), &(hudTexture.pitch));
+	hudTexture.pixels = (uint32_t*)hudTexture.mPixels;
+	renderHud();
+	SDL_UnlockTexture(hudTexture.Texture);
 
-            
-        SDL_RenderCopy(renderer,rendTexture.Texture,NULL,NULL); //copy screen texture to renderer
-        SDL_RenderCopy(renderer,hudTexture.Texture,NULL,NULL); //copy hud texture to renderer
 
-        // Render the changes above
-        SDL_RenderPresent( renderer);
 
- //       SDL_GL_SwapWindow(window);
+	SDL_RenderCopy(renderer,rendTexture.Texture,NULL,NULL); //copy screen texture to renderer
+	SDL_RenderCopy(renderer,hudTexture.Texture,NULL,NULL); //copy hud texture to renderer
+
+	// Render the changes above
+	SDL_RenderPresent( renderer);
+
+//       SDL_GL_SwapWindow(window);
     
 }
 void main_loop() { loop(); }
 
+EM_JS(int, get_browser_width, (), {
+  return window.innerWidth;
+});
 
-EM_BOOL on_canvassize_changed(int eventType, const void *reserved, void *userData)
+EM_JS(int, get_browser_height, (), {
+  return window.innerHeight;
+});
+
+
+EM_BOOL resize_callback(int eventType, const EmscriptenUiEvent* uiEvent, void *userData)
 {
-	int w, h;
-	emscripten_get_canvas_element_size("#canvas", &w, &h);
-	double cssW, cssH;
-	emscripten_get_element_css_size(0, &cssW, &cssH);
-	printf("Canvas resized: WebGL RTT size: %dx%d, canvas CSS size: %02gx%02g\n", w, h, cssW, cssH);
-	// resize SDL window
-	SDL_SetWindowSize(window, w, h);
 
-	//uppdate mouse coordinate offset
-	if(cssW > cssH){
-		input.mouse.offsetX = (float)((int)cssW - w) / (float)2;
-		input.mouse.offsetY = 0;
+
+	int browserWidth = get_browser_width();
+	int browserHeight = get_browser_height();
+
+
+	int newWidth,newHeight;
+	if(browserWidth > browserHeight){
+		newWidth = browserHeight;
+		newHeight = browserHeight;
 	}else{
-		input.mouse.offsetY = ((int)cssH - h) / 2;
-		input.mouse.offsetX = 0;
+		newWidth = browserWidth;
+		newHeight = browserWidth;
 	}
-	g_canvasSizeX = (int)cssW;
-	g_canvasSizeY = (int)cssH;
 
-	return 0;
+	SDL_SetWindowSize(window, newWidth, newHeight);
+	g_windowScaleX = (float)windowSizeX / (float)newWidth;
+	g_windowScaleY = (float)windowSizeY / (float)newHeight;
+
+
+	printf("Window resized: %dx%d\n", (int)browserWidth, (int)browserHeight);
+
+
+
+	return 1;
 }
 
 static inline const char *emscripten_event_type_to_string(int eventType) {
@@ -872,14 +1001,31 @@ int main()
 		memset(&strategy, 0, sizeof(strategy));
 		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_ASPECT;
 		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-		strategy.canvasResizedCallback = on_canvassize_changed;
+//		strategy.canvasResizedCallback = on_canvassize_changed;
 		//emscripten_enter_soft_fullscreen("canvas", &strategy);
 		  EMSCRIPTEN_RESULT ret = emscripten_enter_soft_fullscreen("canvas", &strategy);
 		  printf("ret %d\n",ret);
 	}
 
-	SDL_SetWindowSize(window, windowSizeX, windowSizeY);
+	int browserWidth = get_browser_width();
+	int browserHeight = get_browser_height();
+
+
+	int newWidth,newHeight;
+	if(browserWidth > browserHeight){
+		newWidth = browserHeight;
+		newHeight = browserHeight;
+	}else{
+		newWidth = browserWidth;
+		newHeight = browserWidth;
+	}
+
+	SDL_SetWindowSize(window, newWidth, newHeight);
+	g_windowScaleX = (float)windowSizeX / (float)newWidth;
+	g_windowScaleY = (float)windowSizeY / (float)newHeight;
+
 	emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, mouse_callback);
+	emscripten_set_resize_callback(NULL, NULL, 0, resize_callback);
 
     emscripten_set_main_loop(main_loop, 0, true);
 
