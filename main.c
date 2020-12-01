@@ -26,6 +26,8 @@ sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,wind
 float g_windowScaleX = 0.5f;
 float g_windowScaleY = 0.5f;
 
+
+
 void generate_shadowmap(){
 
  //flush shadowmap
@@ -84,16 +86,16 @@ void generate_shadowmap(){
 		for(int j=0; j<r; j++) val += map.stone[ti+j];
 		for(int j=0  ; j<=r ; j++) {
 			val += map.stone[ri++] - fv       ;
-			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
 			ti++;
 		}
 		for(int j=r+1; j<map.w-r; j++) { val += map.stone[ri++] - map.stone[li++];
-		map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
 		ti++;
 		}
 		for(int j=map.w-r; j<map.w  ; j++) {
 			val += lv        - map.stone[li++];
-			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti-1]);
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
 			ti++;
 		}
 	}
@@ -102,17 +104,17 @@ void generate_shadowmap(){
 		float fv = map.stone[ti], lv = map.stone[ti+map.w*(map.h-1)], val = (r+1)*fv;
 		for(int j=0; j<r; j++) val += map.stone[ti+j*map.w];
 		for(int j=0  ; j<=r ; j++) { val += map.stone[ri] - fv     ;
-		map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
 		ri+=map.w; ti+=map.w;
 		}
 		for(int j=r+1; j<map.h-r; j++) {
 			val += map.stone[ri] - map.stone[li];
-			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
 			li+=map.w; ri+=map.w; ti+=map.w;
 		}
 		for(int j=map.h-r; j<map.h  ; j++) {
 			val += lv      - map.stone[li];
-			map.shadow[ti] += round(val-(r+r+1)*map.stone[ti]);
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
 			li+=map.w; ti+=map.w;
 		}
 	}
@@ -129,6 +131,8 @@ void generate_shadowmap(){
 	boxBlur_4(map.shadow,map.shadowSoft,map.w*map.h,map.w,map.h,4);
 
 
+	//reset flag
+	map.flags.updateShadowMap = 0;
 }
 
 //update map data and stuff
@@ -314,7 +318,7 @@ argb_t getTileColorMist(int x, int y, int ys, vec2f_t upVec){
 									for(int i=0;i<mistHeight+100;i++){
 										int mistFloorPosX = (x+(int)(upVec.x*i));
 										int mistFloorPosY = (y+(int)(upVec.y*i));
-										if(Map.waterHeight[mistFloorPosX+mistFloorPosY*Map.w] + Map.groundHeight[mistFloorPosX+mistFloorPosY*Map.w] + Map.lavaHeight[mistFloorPosX+mistFloorPosY*Map.w] > mistHeight - (float)i*0.60f){ //*0.60f gives pretty much no refraction
+										if(Map.waterHeight[mistFloorPosX+mistFloorPosY*Map.w] + Map.groundHeight[mistFloorPosX+mistFloorPosY*Map.w] + Map.lavaHeight[mistFloorPosX+mistFloorPosY*Map.w] > mistHeight - (float)i*0.60f){ // *0.60f gives pretty much no refraction
 											if(Map.waterHeight[mistFloorPosX+mistFloorPosY*Map.w] > 0.f){
 												test2 = (x+int(upVec.x*i))+(y+int(upVec.y*i))*Map.w;
 												
@@ -396,167 +400,151 @@ argb_t getTileColorMist(int x, int y, int ys, vec2f_t upVec){
 	*/
 }
 
-int counter = 0;
+
 //renders one pixel column
-void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float camZoomDiv,float xs,float ys,float xwt,float ywt,float dDxw, float dDyw){
+void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float xwt,float ywt,float dDxw, float dDyw){
 	//save some variables as local
-	float camZoom = cam.zoom;
-	
+	float camZoom    = cam.zoom;
+	float camZoomDiv = 1.f / cam.zoom;
 	
 	//init some variables
 	uint32_t argb; //store color of Pixel that will be drawn
-	int border=0; //used when skiping pixels to decide when at a edge of a tile that should be a darker shade
+	int border = 0; //used when skiping pixels to decide when at a edge of a tile that should be a darker shade
 	int dPixels = 1; //how many pixels are skipped to get to the next tile
-	
-	
+	int ys;
 	
 	//init ybuffer with lowest mappoint at current x screen position
-		int ybuffer; //ybuffer stores the last drawn lowest position so there is no overdraw
-		//set ybuffer to follow the lower edge of the map
-		if(x > mapCornerBot.x) ybuffer = mapCornerBot.y+tileEdgeSlopeRight*(x-mapCornerBot.x);
-		else ybuffer = mapCornerBot.y+tileEdgeSlopeLeft*(x-mapCornerBot.x);
-		//start drawing column
-		for(int y=rendTexture.h+100*camZoomDiv;y>0;y-=dPixels){ //the 100 offset is so terrain starts drawing a little bit below the screen
-		counter++;
-							
-			xs = x;
-			ys = y;
-			int ywti = (int)ywt;
-			int xwti = (int)xwt;
+	int ybuffer; //ybuffer stores the last drawn lowest position so there is no overdraw
+	//set ybuffer to follow the lower edge of the map
+	if(x > mapCornerBot.x) ybuffer = mapCornerBot.y+tileEdgeSlopeRight*(x-mapCornerBot.x);
+	else ybuffer = mapCornerBot.y+tileEdgeSlopeLeft*(x-mapCornerBot.x);
+	//start drawing column
+	for(int y=rendTexture.h+100*camZoomDiv;y>0;y-=dPixels){ //the 100 offset is so terrain starts drawing a little bit below the screen
 
-			if(ywti > 0 && ywti < map.h && xwti > 0 && xwti < map.w){
-				int posID = xwti + ywti*map.w;
+//		xs = x;
+		ys = y;
+		int ywti = (int)ywt;
+		int xwti = (int)xwt;
 
-
-//					Map.pos[posID].waterHeight = (PIPE::H[(xwti-1)*4 + (ywti-1)*map.wateridth*4]+
-//																				PIPE::H[(xwti)*4 + (ywti-1)*map.wateridth*4]+
-//																				PIPE::H[(xwti+1)*4 + (ywti-1)*map.wateridth*4]+
-//																				PIPE::H[(xwti-1)*4 + (ywti)*map.wateridth*4]+
-//																				PIPE::H[(xwti)*4 + (ywti)*map.wateridth*4]+
-//																				PIPE::H[(xwti+1)*4 + (ywti)*map.wateridth*4]+
-//																				PIPE::H[(xwti-1)*4 + (ywti+1)*map.wateridth*4]+
-//																				PIPE::H[(xwti)*4 + (ywti+1)*map.wateridth*4]+
-//																				PIPE::H[(xwti+1)*4 + (ywti+1)*map.wateridth*4])/9.f;
+		if(ywti > 0 && ywti < map.h && xwti > 0 && xwti < map.w){
+			int posID = xwti + ywti*map.w;
 
 
+			float gndHeight = map.stone[posID];
+			float wtrHeight = map.water[4+xwti*5+ywti*map.w*5];
+			float mistHeight = 0;//Map.mistHeight[posID];
+			float lavaHeight = 0;//Map.lavaHeight[posID];
 
-				float gndHeight = map.stone[posID];
-				float wtrHeight = map.water[4+xwti*5+ywti*map.w*5];
-				float mistHeight = 0;//Map.mistHeight[posID];
-				float lavaHeight = 0;//Map.lavaHeight[posID];
 
-				
-				ys = ys-(gndHeight+wtrHeight+mistHeight+lavaHeight)*camZoomDiv; //offset y by terrain height
-				
-				if(ys < ybuffer){ //check if position is obscured by terrain infront of it and draw if not
-					if(xs > 0 && xs < rendTexture.w){ //check if position is within texture space
-						//get color at worldspace and draw at screenspace 
-						int r,g,b;
-							
-						//draw mist if present
-						if(mistHeight > 0){
-							
-						//	rgb mistRGB = getTileColorMist(xwti, ywti, ys, upVec);
-						//	r = mistRGB.r;
-						//	g = mistRGB.g;
-						//	b = mistRGB.b;
-						}else if(wtrHeight > 0){ //draw water if present
-							argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec,0.f);
-							r = waterARGB.r;
-							g = waterARGB.g;
-							b = waterARGB.b;
-						}else if(lavaHeight > 0){ //draw lava if present
-						//	rgb lavaRGB = getTileColorLava(xwti, ywti, 0.f);
-						//	r = lavaRGB.r;
-						//	g = lavaRGB.g;
-						//	b = lavaRGB.b;
-						
-						}else{ //only ground									
-							r =	map.argb[posID].r;
-							g =	map.argb[posID].g;
-							b =	map.argb[posID].b;
-							r -= map.shadow[posID];
-							g -= map.shadow[posID];
-							b -= map.shadow[posID];
+			ys = ys-(gndHeight+wtrHeight+mistHeight+lavaHeight)*camZoomDiv; //offset y by terrain height
 
-						}
-							
+			if(ys < ybuffer){ //check if position is obscured by terrain infront of it and draw if not
+				//get color at worldspace and draw at screenspace
+				int r,g,b;
 
-						//calculate and draw cursor
-						if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
-							r += 0;
-							g += 30;
-							b += 0;
-						}
-		
-						//make borders of tiles darker, make it so they become darker the more zoomed in you are
-						if(camZoom < 0.3 && !border){
+				//draw mist if present
+				if(mistHeight > 0){
+				//	rgb mistRGB = getTileColorMist(xwti, ywti, ys, upVec);
+				//	r = mistRGB.r;
+				//	g = mistRGB.g;
+				//	b = mistRGB.b;
+				}else if(wtrHeight > 0){ //draw water if present
+					argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec,0.f);
+					r = waterARGB.r;
+					g = waterARGB.g;
+					b = waterARGB.b;
+				}else if(lavaHeight > 0){ //draw lava if present
+				//	rgb lavaRGB = getTileColorLava(xwti, ywti, 0.f);
+				//	r = lavaRGB.r;
+				//	g = lavaRGB.g;
+				//	b = lavaRGB.b;
+
+				}else{ //only ground
+					r =	map.argb[posID].r;
+					g =	map.argb[posID].g;
+					b =	map.argb[posID].b;
+					r -= map.shadow[posID];
+					g -= map.shadow[posID];
+					b -= map.shadow[posID];
+
+				}
+
+
+				//calculate and draw cursor
+				if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
+					r += 0;
+					g += 30;
+					b += 0;
+				}
+
+				//make borders of tiles darker, make it so they become darker the more zoomed in you are
+				if(camZoom < 0.3 && !border){
 //							float borderWidth = 1.6*camZoom;
 //							if(xwt - (int)xwt < borderWidth ||
 //								 ywt - (int)ywt < borderWidth ||
 //								 (int)xwt+1 - xwt < borderWidth||
 //								 (int)ywt+1 - ywt < borderWidth){
-										r -= (int)(1*camZoomDiv);  
-										g -= (int)(1*camZoomDiv);
-										b -= (int)(1*camZoomDiv);											
+								r -= (int)(1*camZoomDiv);
+								g -= (int)(1*camZoomDiv);
+								b -= (int)(1*camZoomDiv);
 //								 }
-						}
-							
-							
-						//clamp color values
-						argb = (min(max((int)r,0),255) << 16) | (min(max((int)g,0),255) << 8) | (min(max((int)b,0),255));
-						
-						
-						//only draw visible pixels
-						for(int Y=ys;Y<ybuffer;Y++){
-							
-							//ide för optimisering, Omorganisera så pixlar sparas y + x*h ist så kan man använda std::fill sen för 
-							//vertikala pixlar ligger brevid varandra i minnet då
-							if(Y > 0 && Y < rendTexture.h ){
-								rendTexture.pixels[(int)xs + ((int)Y)*rendTexture.w] = argb;	//draw pixels
-							}
-						}
-					}
-					ybuffer = ys; //save current highest point in pixel column
-				}else{
-						//if pixel is hidden behind terrain, save that position to hide other objects
+				}
+
+
+				//clamp color values
+				argb = (min(max((int)r,0),255) << 16) | (min(max((int)g,0),255) << 8) | (min(max((int)b,0),255));
+
+				ybuffer = min(ybuffer, rendTexture.h);
+				ys = max(ys, 0); //TODO: Y can probably be checked for negative values earlier than this
+				//only draw visible pixels
+				for(int Y=ys;Y<ybuffer;Y++){
+//						if(!(Y > 0)) printf("%d\n",Y);
+
+						rendTexture.pixels[x + (Y)*rendTexture.w] = argb;	//draw pixels
+
+
+				}
+
+				ybuffer = ys; //save current highest point in pixel column
+			}else{
+					//if pixel is hidden behind terrain, save that position to hide other objects
 //						for(int Y=ys;Y<ys+10;Y++){
 //							if(xs >= 0 && xs < rendTexture.w && Y >= 0 && Y < rendTexture.h) cam.visibility[(int)xs+(int)Y*rendererSizeX] = 0;
 //						}
-				}
+			}
 
-			}
-				dPixels = 0; // reset delta Y pixels
-				//this piece of code calculates how many y pixels (dPixels) there is to the next tile
-				//and the border thing makes it so it only jumps one pixel when there is a
-				//new tile and the next drawing part is darker, thus making the edge of the tile darker
-				if(!border){ //!border
-					border = 1;
-					float testX,testY;
-					 if(cam.rot <= 45*3.141592654/180 || cam.rot > 315*3.141592654/180 ){
-						testX =  ( (xwt -(int)xwt))/dDxw;
-					  testY =  ( (ywt -(int)ywt))/dDyw;
-					 }else if(cam.rot <= 135*3.141592654/180 ){
-						testX =  ((1-(xwt -(int)xwt))/dDxw);
-						testY =  (((ywt -(int)ywt))/dDyw);
-					 }else if(cam.rot <= 225*3.141592654/180){
-					  testX =  (1 - (xwt -(int)xwt))/dDxw;
-						testY =  (1 - (ywt -(int)ywt))/dDyw;
-					 }else if(cam.rot <= 315*3.141592654/180 ){
-						testX =  (((xwt -(int)xwt))/dDxw);
-						testY =  ((1-(ywt -(int)ywt))/dDyw);
-					 }
-					 dPixels = min(fabsf(testX),fabsf(testY));
-					// if(dPixels < 1) dPixels = 1;
-					xwt += dDxw * dPixels;
-					ywt += dDyw * dPixels;
-				}else{
-					border = 0;
-					xwt += dDxw;
-					ywt += dDyw;
-					dPixels = 1;
-				}
-			}
+		}
+		dPixels = 0; // reset delta Y pixels
+		//this piece of code calculates how many y pixels (dPixels) there is to the next tile
+		//and the border thing makes it so it only jumps one pixel when there is a
+		//new tile and the next drawing part is darker, thus making the edge of the tile darker
+		if(!border){ //!border
+			border = 1;
+			float testX,testY;
+			 if(cam.rot <= (45.f*3.141592654)/180.f || cam.rot > (315.f*3.141592654)/180.f ){
+				testX =  ( (xwt -(int)xwt))/dDxw;
+			  testY =  ( (ywt -(int)ywt))/dDyw;
+			 }else if(cam.rot <= (135.f*3.141592654)/180.f ){
+				testX =  ((1-(xwt -(int)xwt))/dDxw);
+				testY =  (((ywt -(int)ywt))/dDyw);
+			 }else if(cam.rot <= (225.f*3.141592654)/180.f){
+			  testX =  (1 - (xwt -(int)xwt))/dDxw;
+				testY =  (1 - (ywt -(int)ywt))/dDyw;
+			 }else if(cam.rot <= (315.f*3.141592654)/180.f ){
+				testX =  (((xwt -(int)xwt))/dDxw);
+				testY =  ((1-(ywt -(int)ywt))/dDyw);
+			 }
+			 dPixels = min(fabsf(testX),fabsf(testY));
+			// if(dPixels < 1) dPixels = 1;
+			xwt += dDxw * dPixels;
+			ywt += dDyw * dPixels;
+		}else{
+			border = 0;
+			xwt += dDxw;
+			ywt += dDyw;
+			dPixels = 1;
+		}
+	}
 	
 }
 
@@ -564,7 +552,7 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 
 void render(){
         for(int y=0;y<rendTexture.h;y++){
-			Uint32 rgb = (100) | (100) | (100);
+			Uint32 rgb = (100 << 16) | (100 << 8) | (100);
             for(int x=0;x<rendTexture.w;x++){
                 rendTexture.pixels[x + y*rendTexture.w] = rgb;	
             }
@@ -649,7 +637,7 @@ void render(){
 			float xwt = xw; //make a copy of world coordinate for leftmost position at current depth
 			float ywt = yw; 
 		
-			renderColumn(x,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,camZoomDiv,xs,ys,xwt,ywt,dDxw,dDyw);
+			renderColumn(x,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,xwt,ywt,dDxw,dDyw);
 			
 		
 			xw += dxw; //update world coords corresponding to one pixel right
@@ -728,7 +716,7 @@ void init(){
 
 	loadHeightMap("assets/mountain_height.png");
 	loadColorMap("assets/mountain_color.png");
-
+	map.flags.updateShadowMap = 1; //make sure shadows are updated after map load
 }
 
 
@@ -853,7 +841,7 @@ void process(){
 	if(g_time_ms - timer_100ms > 100){
 		timer_100ms = g_time_ms;
 
-		generate_shadowmap();
+		if(map.flags.updateShadowMap) generate_shadowmap();
 	}
 
 }

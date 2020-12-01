@@ -84,6 +84,9 @@ struct{
     float shadowSoft[MAPW*MAPH];
     float stone[MAPW*MAPH];
     float water[5*MAPW*MAPH]; //water
+    struct{
+    	unsigned int updateShadowMap: 1;
+    }flags;
 }map;
 
 //ändra water till att vara en array av struct fluid med medlemmarna height, left, osv
@@ -96,10 +99,10 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
         	//if fluid flow to cell equals flow from cell (constant flow) then the cell does not need to be updated
         	if((W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]+W[4+x*5+y*MAPW*5]) == 0)continue;
 
-            W[0+x*5+y*MAPW*5] = max(W[0+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x+1)*5+y*MAPW*5]-T[(x+1)+y*MAPW])*dTime*A*g/l , 0.f); //höger
-            W[1+x*5+y*MAPW*5] = max(W[1+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y-1)*MAPW*5]-T[(x)+(y-1)*MAPW])*dTime*A*g/l , 0.f); //upp
-            W[2+x*5+y*MAPW*5] = max(W[2+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x-1)*5+y*MAPW*5]-T[(x-1)+y*MAPW])*dTime*A*g/l , 0.f); //vänster
-            W[3+x*5+y*MAPW*5] = max(W[3+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y+1)*MAPW*5]-T[(x)+(y+1)*MAPW])*dTime*A*g/l , 0.f); //ner
+            W[0+x*5+y*MAPW*5] = max(W[0+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x+1)*5+y*MAPW*5]-T[(x+1)+y*MAPW])     *dTime*A*g/l , 0.f); //höger
+            W[1+x*5+y*MAPW*5] = max(W[1+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y-1)*MAPW*5]-T[(x)+(y-1)*MAPW]) *dTime*A*g/l , 0.f); //upp
+            W[2+x*5+y*MAPW*5] = max(W[2+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x-1)*5+y*MAPW*5]-T[(x-1)+y*MAPW])     *dTime*A*g/l , 0.f); //vänster
+            W[3+x*5+y*MAPW*5] = max(W[3+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y+1)*MAPW*5]-T[(x)+(y+1)*MAPW]) *dTime*A*g/l , 0.f); //ner
             
             
             //limit
@@ -322,6 +325,7 @@ void print(sdlTexture* tex, char* str, int x, int y){
     }
 }
 
+#define ROUNDF(x) ((int)(x + 0.5f))
 
 void boxBlurT_4(float *source, float *target,int w, int h, int r){
     float iarr = 1 / (float)(r+r+1);
@@ -329,9 +333,9 @@ void boxBlurT_4(float *source, float *target,int w, int h, int r){
         int ti = i, li = ti, ri = ti+r*w;
         float fv = source[ti], lv = source[ti+w*(h-1)], val = (r+1)*fv;
         for(int j=0; j<r; j++) val += source[ti+j*w];
-        for(int j=0  ; j<=r ; j++) { val += source[ri] - fv     ;  target[ti] = round(val*iarr);  ri+=w; ti+=w; }
-        for(int j=r+1; j<h-r; j++) { val += source[ri] - source[li];  target[ti] = round(val*iarr);  li+=w; ri+=w; ti+=w; }
-        for(int j=h-r; j<h  ; j++) { val += lv      - source[li];  target[ti] = round(val*iarr);  li+=w; ti+=w; }
+        for(int j=0  ; j<=r ; j++) { val += source[ri] - fv     ;  target[ti] = ROUNDF(val*iarr);  ri+=w; ti+=w; }
+        for(int j=r+1; j<h-r; j++) { val += source[ri] - source[li];  target[ti] = ROUNDF(val*iarr);  li+=w; ri+=w; ti+=w; }
+        for(int j=h-r; j<h  ; j++) { val += lv      - source[li];  target[ti] = ROUNDF(val*iarr);  li+=w; ti+=w; }
     }
 }
 
@@ -341,9 +345,9 @@ void boxBlurH_4(float *source, float *target,int w, int h, int r){
         int ti = i*w, li = ti, ri = ti+r;
         float fv = source[ti], lv = source[ti+w-1], val = (r+1)*fv;
         for(int j=0; j<r; j++) val += source[ti+j];
-        for(int j=0  ; j<=r ; j++) { val += source[ri++] - fv       ;   target[ti++] = round(val*iarr); }
-        for(int j=r+1; j<w-r; j++) { val += source[ri++] - source[li++];   target[ti++] = round(val*iarr); }
-        for(int j=w-r; j<w  ; j++) { val += lv        - source[li++];   target[ti++] = round(val*iarr); }
+        for(int j=0  ; j<=r ; j++) { val += source[ri++] - fv       ;   target[ti++] = ROUNDF(val*iarr); }
+        for(int j=r+1; j<w-r; j++) { val += source[ri++] - source[li++];   target[ti++] = ROUNDF(val*iarr); }
+        for(int j=w-r; j<w  ; j++) { val += lv        - source[li++];   target[ti++] = ROUNDF(val*iarr); }
     }
 }
 
@@ -361,7 +365,7 @@ void gaussBlur_4(float *source, float *target,int source_lenght, int w, int h, i
     int wu = wl+2;
 
     float mIdeal = (12*r*r - n*wl*wl - 4*n*wl - 3*n)/(-4*wl - 4);
-    float m = round(mIdeal);
+    float m = ROUNDF(mIdeal);
     // var sigmaActual = std::sqrt( (m*wl*wl + (n-m)*wu*wu - n)/12 );
 
 	for(int i=0; i<n;i++){
