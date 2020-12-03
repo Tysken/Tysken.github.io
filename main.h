@@ -94,6 +94,7 @@ struct{
 void water_update(float* fluid, float g, float l, float A, float friction, float dTime){
     float* T = map.stone;
     float* W = fluid;
+
     for(int y=1;y<MAPH-1;y++){
         for(int x=1;x<MAPW-1;x++){
         	//if fluid flow to cell equals flow from cell (constant flow) then the cell does not need to be updated
@@ -105,7 +106,7 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
             W[3+x*5+y*MAPW*5] = max(W[3+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y+1)*MAPW*5]-T[(x)+(y+1)*MAPW]) *dTime*A*g/l , 0.f); //ner
             
             
-            //limit
+            //make sure flow out of cell isn't greater than inflow + existing fluid
             if(W[4+x*5+y*MAPW*5] - (W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]) < 0){
                 float K = min(W[4+x*5+y*MAPW*5]*l*l/((W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5])*dTime) , 1.f);
                 W[0+x*5+y*MAPW*5] *= K;
@@ -130,6 +131,8 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
         for(int x=1;x<MAPW-1;x++){
             float deltaV = (W[0+(x-1)*5+y*MAPW*5]+W[1+x*5+(y+1)*MAPW*5]+W[2+(x+1)*5+y*MAPW*5]+W[3+x*5+(y-1)*MAPW*5] - (W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]))*dTime;
             W[4+(x)*5+(y)*MAPW*5] = max(W[4+(x)*5+(y)*MAPW*5] + deltaV/(l*l), 0.f);
+
+
         }
     }
     

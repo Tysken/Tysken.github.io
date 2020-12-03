@@ -281,6 +281,18 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade){
 //			g += (curl*curl*0.01+velDiff*velDiff*0.01)*(1-min(shade,1.0f));
 //			b += (curl*curl*0.01+velDiff*velDiff*0.01)*(1-min(shade,1.0f));
 
+			//reflections
+//			for(int i=0;i<100;i++){
+//				int reflectionPosX = (x+(int)(upVec.x*i));
+//				int reflectionPosY = (y+(int)(upVec.y*i));
+//				if(map.stone[reflectionPosX+reflectionPosY*map.w] >= map.stone[x+y*map.w] + wtrHeight + (float)i*0.75f){
+//
+//					r = map.argb[reflectionPosX+reflectionPosY*map.w].r;
+//					g = map.argb[reflectionPosX+reflectionPosY*map.w].g;
+//					b = map.argb[reflectionPosX+reflectionPosY*map.w].b;
+//					break;
+//				}
+//			}
 		}
 	//draw foam
 //	if(map.foamLevel[x + y*map.w] > 0){
@@ -402,7 +414,7 @@ argb_t getTileColorMist(int x, int y, int ys, vec2f_t upVec){
 
 
 //renders one pixel column
-void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float xwt,float ywt,float dDxw, float dDyw){
+void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float xwt,float ywt,float dDxw, float dDyw){
 	//save some variables as local
 	float camZoom    = cam.zoom;
 	float camZoomDiv = 1.f / cam.zoom;
@@ -419,13 +431,16 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 	if(x > mapCornerBot.x) ybuffer = mapCornerBot.y+tileEdgeSlopeRight*(x-mapCornerBot.x);
 	else ybuffer = mapCornerBot.y+tileEdgeSlopeLeft*(x-mapCornerBot.x);
 	//start drawing column
-	for(int y=rendTexture.h+100*camZoomDiv;y>0;y-=dPixels){ //the 100 offset is so terrain starts drawing a little bit below the screen
+	for(int y=yBot;y>yTop;y-=dPixels){ //the 100 offset is so terrain starts drawing a little bit below the screen
 
 //		xs = x;
 		ys = y;
 		int ywti = (int)ywt;
 		int xwti = (int)xwt;
-
+//		ywti = max(ywti, 0);
+//		ywti = min(ywti, map.h);
+//		xwti = max(xwti, 0);
+//		xwti = min(xwti, map.w);
 		if(ywti > 0 && ywti < map.h && xwti > 0 && xwti < map.w){
 			int posID = xwti + ywti*map.w;
 
@@ -438,82 +453,72 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 
 			ys = ys-(gndHeight+wtrHeight+mistHeight+lavaHeight)*camZoomDiv; //offset y by terrain height
 
-			if(ys < ybuffer){ //check if position is obscured by terrain infront of it and draw if not
-				//get color at worldspace and draw at screenspace
-				int r,g,b;
+			//get color at worldspace and draw at screenspace
+			int r,g,b;
 
-				//draw mist if present
-				if(mistHeight > 0){
-				//	rgb mistRGB = getTileColorMist(xwti, ywti, ys, upVec);
-				//	r = mistRGB.r;
-				//	g = mistRGB.g;
-				//	b = mistRGB.b;
-				}else if(wtrHeight > 0){ //draw water if present
-					argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec,0.f);
-					r = waterARGB.r;
-					g = waterARGB.g;
-					b = waterARGB.b;
-				}else if(lavaHeight > 0){ //draw lava if present
-				//	rgb lavaRGB = getTileColorLava(xwti, ywti, 0.f);
-				//	r = lavaRGB.r;
-				//	g = lavaRGB.g;
-				//	b = lavaRGB.b;
+			//draw mist if present
+			if(mistHeight > 0){
+			//	rgb mistRGB = getTileColorMist(xwti, ywti, ys, upVec);
+			//	r = mistRGB.r;
+			//	g = mistRGB.g;
+			//	b = mistRGB.b;
+			}else if(wtrHeight > 0){ //draw water if present
+				argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec,0.f);
+				r = waterARGB.r;
+				g = waterARGB.g;
+				b = waterARGB.b;
+			}else if(lavaHeight > 0){ //draw lava if present
+			//	rgb lavaRGB = getTileColorLava(xwti, ywti, 0.f);
+			//	r = lavaRGB.r;
+			//	g = lavaRGB.g;
+			//	b = lavaRGB.b;
 
-				}else{ //only ground
-					r =	map.argb[posID].r;
-					g =	map.argb[posID].g;
-					b =	map.argb[posID].b;
-					r -= map.shadow[posID];
-					g -= map.shadow[posID];
-					b -= map.shadow[posID];
+			}else{ //only ground
+				r =	map.argb[posID].r;
+				g =	map.argb[posID].g;
+				b =	map.argb[posID].b;
+				r -= map.shadow[posID];
+				g -= map.shadow[posID];
+				b -= map.shadow[posID];
 
-				}
+			}
 
 
-				//calculate and draw cursor
-				if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
-					r += 0;
-					g += 30;
-					b += 0;
-				}
+			//calculate and draw cursor
+			if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
+				r += 0;
+				g += 30;
+				b += 0;
+			}
 
-				//make borders of tiles darker, make it so they become darker the more zoomed in you are
-				if(camZoom < 0.3 && !border){
+			//make borders of tiles darker, make it so they become darker the more zoomed in you are
+			if(camZoom < 0.3 && !border){
 //							float borderWidth = 1.6*camZoom;
 //							if(xwt - (int)xwt < borderWidth ||
 //								 ywt - (int)ywt < borderWidth ||
 //								 (int)xwt+1 - xwt < borderWidth||
 //								 (int)ywt+1 - ywt < borderWidth){
-								r -= (int)(1*camZoomDiv);
-								g -= (int)(1*camZoomDiv);
-								b -= (int)(1*camZoomDiv);
+							r -= (int)(1*camZoomDiv);
+							g -= (int)(1*camZoomDiv);
+							b -= (int)(1*camZoomDiv);
 //								 }
-				}
-
-
-				//clamp color values
-				argb = (min(max((int)r,0),255) << 16) | (min(max((int)g,0),255) << 8) | (min(max((int)b,0),255));
-
-				ybuffer = min(ybuffer, rendTexture.h);
-				ys = max(ys, 0); //TODO: Y can probably be checked for negative values earlier than this
-				//only draw visible pixels
-				for(int Y=ys;Y<ybuffer;Y++){
-//						if(!(Y > 0)) printf("%d\n",Y);
-
-						rendTexture.pixels[x + (Y)*rendTexture.w] = argb;	//draw pixels
-
-
-				}
-
-				ybuffer = ys; //save current highest point in pixel column
-			}else{
-					//if pixel is hidden behind terrain, save that position to hide other objects
-//						for(int Y=ys;Y<ys+10;Y++){
-//							if(xs >= 0 && xs < rendTexture.w && Y >= 0 && Y < rendTexture.h) cam.visibility[(int)xs+(int)Y*rendererSizeX] = 0;
-//						}
 			}
 
-		}
+
+			//clamp color values
+			argb = (min(max((int)r,0),255) << 16) | (min(max((int)g,0),255) << 8) | (min(max((int)b,0),255));
+
+			ybuffer = min(ybuffer, rendTexture.h);
+			ys = max(ys, 0);
+			//only draw visible pixels
+			for(int Y=ybuffer-1;Y>=ys;Y--){
+
+				rendTexture.pixels[x + (Y)*rendTexture.w] = argb;	//draw pixels
+
+			}
+
+			ybuffer = ys; //save current highest point in pixel column
+
 		dPixels = 0; // reset delta Y pixels
 		//this piece of code calculates how many y pixels (dPixels) there is to the next tile
 		//and the border thing makes it so it only jumps one pixel when there is a
@@ -523,7 +528,7 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 			float testX,testY;
 			 if(cam.rot <= (45.f*3.141592654)/180.f || cam.rot > (315.f*3.141592654)/180.f ){
 				testX =  ( (xwt -(int)xwt))/dDxw;
-			  testY =  ( (ywt -(int)ywt))/dDyw;
+				testY =  ( (ywt -(int)ywt))/dDyw;
 			 }else if(cam.rot <= (135.f*3.141592654)/180.f ){
 				testX =  ((1-(xwt -(int)xwt))/dDxw);
 				testY =  (((ywt -(int)ywt))/dDyw);
@@ -544,6 +549,11 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 			ywt += dDyw;
 			dPixels = 1;
 		}
+}else{
+	dPixels = 10;
+	xwt += dDxw * dPixels;
+	ywt += dDyw * dPixels;
+}
 	}
 	
 }
@@ -551,109 +561,119 @@ void renderColumn(int x, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlope
 
 
 void render(){
-        for(int y=0;y<rendTexture.h;y++){
-			Uint32 rgb = (100 << 16) | (100 << 8) | (100);
-            for(int x=0;x<rendTexture.w;x++){
-                rendTexture.pixels[x + y*rendTexture.w] = rgb;	
-            }
-        }
-
-		
-		float xw,yw,zw;
-		float xs,ys;
-
-		//furstum
-		xs = 0;
-		ys = 0;
-		vec2f_t ftl = screen2world(xs,ys);
-		xs = rendTexture.w;
-		ys = rendTexture.h;
-		vec2f_t fbr = screen2world(xs,ys);
-		xs = 0;
-		ys = rendTexture.h;
-		vec2f_t fbl = screen2world(xs,ys);
-		xs = 0;
-		ys = rendTexture.h+100/cam.zoom;
-		vec2f_t fblb = screen2world(xs,ys);
-		
-		float dxw  = (fbr.x - fbl.x)/rendTexture.w; //delta x worldspace
-		float dyw  = (fbr.y - fbl.y)/rendTexture.w; //delta y worldspace
-		float dDxw = (ftl.x - fbl.x)/rendTexture.h; //delta x worldspace depth
-		float dDyw = (ftl.y - fbl.y)/rendTexture.h; //delta y worldspace depth
-		
-		//create normalized vector that point up on the screen but in world coorinates, for use with raytracing water refraction
-		vec2f_t  upVec = {ftl.x - fbl.x, ftl.y - fbl.y};
-		double tempDistLongName = sqrt(upVec.x*upVec.x+upVec.y*upVec.y);
-		upVec.x /= tempDistLongName;
-		upVec.y /= tempDistLongName;
-	
-	
-		//some stuff that I use
-		float camZoom = cam.zoom;
-		float camZoomDiv = 1/camZoom;
-		float sed,hei,sloX,sloY;
-		int water;
-
-		
-		
-		///////// merge these calculations later
-		//calculate screen coordinates of world corners
-		vec2f_t tlw =world2screen(1,1);
-		vec2f_t trw =world2screen(map.w,1);
-		vec2f_t blw =world2screen(1,map.h);
-		vec2f_t brw =world2screen(map.w,map.h);
-		//check what relative postion map corners have
-		vec2f_t mapCornerTop,mapCornerLeft,mapCornerBot,mapCornerRight;
-		if(fabsf(cam.rot) < 45*3.141592654/180 || fabsf(cam.rot) >= 315*3.141592654/180 ){
-			 mapCornerTop   = (vec2f_t){tlw.x,tlw.y};
-			 mapCornerLeft  = (vec2f_t){blw.x,blw.y};
-			 mapCornerBot   = (vec2f_t){brw.x,brw.y};
-			 mapCornerRight = (vec2f_t){trw.x,trw.y};
-		}else if(fabsf(cam.rot) < 135*3.141592654/180){
-			 mapCornerRight = (vec2f_t){brw.x,brw.y};
-			 mapCornerTop   = (vec2f_t){trw.x,trw.y};
-			 mapCornerLeft  = (vec2f_t){tlw.x,tlw.y};
-			 mapCornerBot   = (vec2f_t){blw.x,blw.y};
-		}else if(fabsf(cam.rot) < 225*3.141592654/180){
-			 mapCornerBot   = (vec2f_t){tlw.x,tlw.y};
-			 mapCornerRight = (vec2f_t){blw.x,blw.y};
-			 mapCornerTop   = (vec2f_t){brw.x,brw.y};
-			 mapCornerLeft  = (vec2f_t){trw.x,trw.y};
-		}else if(fabsf(cam.rot) < 315*3.141592654/180){
-			 mapCornerLeft  = (vec2f_t){brw.x,brw.y};
-			 mapCornerBot   = (vec2f_t){trw.x,trw.y};
-			 mapCornerRight = (vec2f_t){tlw.x,tlw.y};
-			 mapCornerTop   = (vec2f_t){blw.x,blw.y};
-		}
-		//calculate slope of tile edges on screen
-		float tileEdgeSlopeRight = (float)(mapCornerRight.y-mapCornerBot.y)/(float)(mapCornerRight.x-mapCornerBot.x);
-		float tileEdgeSlopeLeft = (float)(mapCornerBot.y-mapCornerLeft.y)/(float)(mapCornerBot.x-mapCornerLeft.x);
-		/////////
-
-		xw = fblb.x; //set world coords to coresponding coords for bottom left of screen
-		yw = fblb.y; //then iterate left to right, bottom to top of screen
-
+	Uint32 rgb = (100 << 16) | (100 << 8) | (100);
+	for(int y=0;y<rendTexture.h;y++){
 		for(int x=0;x<rendTexture.w;x++){
-			float xwt = xw; //make a copy of world coordinate for leftmost position at current depth
-			float ywt = yw; 
-		
-			renderColumn(x,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,xwt,ywt,dDxw,dDyw);
-			
-		
-			xw += dxw; //update world coords corresponding to one pixel right
-			yw += dyw;
+			rendTexture.pixels[x + y*rendTexture.w] = rgb;
 		}
+	}
 
-		//draw mouse
-		for(int y=-1;y<1;y++){
-			for(int x=-1;x<1;x++){
-				uint32_t rgb = (255 << 16) | (255 << 8) | (255);
-				if(input.mouse.x-10 > 0 && input.mouse.x + 10 < rendTexture.w && 
-				   	input.mouse.y-10 > 0 && input.mouse.y + 10 < rendTexture.h ){
-						rendTexture.pixels[(cursor.screenX+x)+(cursor.screenY+y)*rendTexture.w] = rgb;
-				}
+
+	float xw,yw,zw;
+	float xs,ys;
+
+	//furstum
+	xs = 0;
+	ys = 0;
+	vec2f_t ftl = screen2world(xs,ys);
+	xs = rendTexture.w;
+	ys = rendTexture.h;
+	vec2f_t fbr = screen2world(xs,ys);
+	xs = 0;
+	ys = rendTexture.h;
+	vec2f_t fbl = screen2world(xs,ys);
+	xs = 0;
+	ys = rendTexture.h+100/cam.zoom;
+	vec2f_t fblb = screen2world(xs,ys);
+	
+	float dxw  = (fbr.x - fbl.x)/rendTexture.w; //delta x worldspace
+	float dyw  = (fbr.y - fbl.y)/rendTexture.w; //delta y worldspace
+	float dDxw = (ftl.x - fbl.x)/rendTexture.h; //delta x worldspace depth
+	float dDyw = (ftl.y - fbl.y)/rendTexture.h; //delta y worldspace depth
+	
+	//create normalized vector that point up on the screen but in world coorinates, for use with raytracing water refraction
+	vec2f_t  upVec = {ftl.x - fbl.x, ftl.y - fbl.y};
+	double tempDistLongName = sqrt(upVec.x*upVec.x+upVec.y*upVec.y);
+	upVec.x /= tempDistLongName;
+	upVec.y /= tempDistLongName;
+
+
+	//some stuff that I use
+	float camZoom = cam.zoom;
+	float camZoomDiv = 1/camZoom;
+	float sed,hei,sloX,sloY;
+	int water;
+
+
+
+	///////// merge these calculations later
+	//calculate screen coordinates of world corners
+	vec2f_t tlw =world2screen(1,1);
+	vec2f_t trw =world2screen(map.w,1);
+	vec2f_t blw =world2screen(1,map.h);
+	vec2f_t brw =world2screen(map.w,map.h);
+	//check what relative postion map corners have
+	vec2f_t mapCornerTop,mapCornerLeft,mapCornerBot,mapCornerRight;
+	if(fabsf(cam.rot) < 45*3.141592654/180 || fabsf(cam.rot) >= 315*3.141592654/180 ){
+		 mapCornerTop   = (vec2f_t){tlw.x,tlw.y};
+		 mapCornerLeft  = (vec2f_t){blw.x,blw.y};
+		 mapCornerBot   = (vec2f_t){brw.x,brw.y};
+		 mapCornerRight = (vec2f_t){trw.x,trw.y};
+	}else if(fabsf(cam.rot) < 135*3.141592654/180){
+		 mapCornerRight = (vec2f_t){brw.x,brw.y};
+		 mapCornerTop   = (vec2f_t){trw.x,trw.y};
+		 mapCornerLeft  = (vec2f_t){tlw.x,tlw.y};
+		 mapCornerBot   = (vec2f_t){blw.x,blw.y};
+	}else if(fabsf(cam.rot) < 225*3.141592654/180){
+		 mapCornerBot   = (vec2f_t){tlw.x,tlw.y};
+		 mapCornerRight = (vec2f_t){blw.x,blw.y};
+		 mapCornerTop   = (vec2f_t){brw.x,brw.y};
+		 mapCornerLeft  = (vec2f_t){trw.x,trw.y};
+	}else if(fabsf(cam.rot) < 315*3.141592654/180){
+		 mapCornerLeft  = (vec2f_t){brw.x,brw.y};
+		 mapCornerBot   = (vec2f_t){trw.x,trw.y};
+		 mapCornerRight = (vec2f_t){tlw.x,tlw.y};
+		 mapCornerTop   = (vec2f_t){blw.x,blw.y};
+	}
+	//calculate slope of tile edges on screen
+	float tileEdgeSlopeRight = (float)(mapCornerRight.y-mapCornerBot.y)/(float)(mapCornerRight.x-mapCornerBot.x);
+	float tileEdgeSlopeLeft = (float)(mapCornerBot.y-mapCornerLeft.y)/(float)(mapCornerBot.x-mapCornerLeft.x);
+	/////////
+
+
+	//these coordinates will be the bounds at which renderColumn() will render any terrain
+	int leftMostXCoord  = max((int)mapCornerLeft.x, 0);
+	int rightMostXCoord = min((int)mapCornerRight.x, rendTexture.w);
+	int botMostYCoord = min((int)mapCornerBot.y, rendTexture.h+100/cam.zoom);
+	int topMostYCoord = max((int)mapCornerTop.y-100/cam.zoom, 0);
+
+	vec2f_t leftMostWorldCoord = screen2world(leftMostXCoord,botMostYCoord);
+
+	xw = leftMostWorldCoord.x; //set world coords to coresponding coords for bottom left of screen
+	yw = leftMostWorldCoord.y; //then iterate left to right, bottom to top of screen
+
+	for(int x = leftMostXCoord; x < rightMostXCoord;x++){
+		float xwt = xw; //make a copy of world coordinate for leftmost position at current depth
+		float ywt = yw;
+
+		renderColumn(x,botMostYCoord,topMostYCoord,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,xwt,ywt,dDxw,dDyw);
+		
+
+		xw += dxw; //update world coords corresponding to one pixel right
+		yw += dyw;
+	}
+
+		
+	//draw mouse
+	for(int y=-1;y<1;y++){
+		for(int x=-1;x<1;x++){
+			uint32_t rgb = (255 << 16) | (255 << 8) | (255);
+			if(input.mouse.x-10 > 0 && input.mouse.x + 10 < rendTexture.w &&
+				input.mouse.y-10 > 0 && input.mouse.y + 10 < rendTexture.h ){
+					rendTexture.pixels[(cursor.screenX+x)+(cursor.screenY+y)*rendTexture.w] = rgb;
 			}
 		}
+	}
 
 	
 	//calculate and print fps
@@ -702,12 +722,6 @@ void init(){
 	cam.y = -200;
 	cam.rot = 3.14f/2;
 	cam.zoom = 0.3;
-	for(int y=0;y<map.h;y++){
-		for(int x=0;x<map.w;x++){
-
-
-		}
-	}
 
 	cursor.amount = 0.3;
 	cursor.radius = 5;
@@ -716,7 +730,12 @@ void init(){
 
 	loadHeightMap("assets/mountain_height.png");
 	loadColorMap("assets/mountain_color.png");
+
 	map.flags.updateShadowMap = 1; //make sure shadows are updated after map load
+
+
+
+
 }
 
 
