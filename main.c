@@ -1010,7 +1010,7 @@ EM_BOOL mouse_callback(int eventType, const EmscriptenMouseEvent *e, void *userD
 
   return 0;
 }
-
+#if ENABLE_MULTITHREADING
 /* this function is run by the second thread */
 void *render_thread()
 {
@@ -1038,7 +1038,7 @@ while(1){
 return NULL;
 
 }
-
+#endif
 int main()
 {
 	init();
@@ -1048,10 +1048,10 @@ int main()
 	/* show the initial values of x and y */
 	printf("x: %d, y: %d\n", x, y);
 
+#if ENABLE_MULTITHREADING
 	/* this variable is our reference to the second thread */
 	pthread_t update_water_pthread;
 	pthread_t render_pthread;
-#if ENABLE_MULTITHREADING
 	/* create a second thread which executes inc_x(&x) */
 	if(pthread_create(&update_water_pthread, NULL, update_water_thread, NULL)) printf("Error creating thread\n");
 	if(pthread_create(&render_pthread, NULL, render_thread, NULL)) printf("Error creating thread\n");

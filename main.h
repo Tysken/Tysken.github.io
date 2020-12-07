@@ -9,11 +9,14 @@
 #include <SDL2/SDL_image.h>
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
+
+#define ENABLE_MULTITHREADING 0
+#if ENABLE_MULTITHREADING
 #include <pthread.h>
+#endif
 #include <stdatomic.h>
 
 #define IS_FULLSCREEN 0
-#define ENABLE_MULTITHREADING 0
 
 #define max(a,b) \
    ({ __typeof__ (a) _a = (a); \
