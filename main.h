@@ -1,5 +1,13 @@
 
 
+
+//To compile with multithreading
+//emcc main.c -std=c17 -s WASM=1 -s USE_SDL=2 -s -s USE_SDL_IMAGE=2 -s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0 -s SDL2_IMAGE_FORMATS='["png"]' -s TOTAL_MEMORY=536870912 -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=4 ^C-preload-file assets -O3 --profiling -o index.js
+
+//To compile without
+//emcc main.c -std=c17 -s WASM=1 -s USE_SDL=2 -s -s USE_SDL_IMAGE=2 -s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0 -s SDL2_IMAGE_FORMATS='["png"]' -s TOTAL_MEMORY=536870912  --preload-file assets -O3 --profiling -o index.js
+
+
 #include <stdbool.h>
 #include <math.h>
 #include <emscripten.h>
