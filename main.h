@@ -9,6 +9,8 @@
 #include <SDL2/SDL_image.h>
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
+#include <pthread.h>
+#include <stdatomic.h>
 
 #define IS_FULLSCREEN 0
 
@@ -27,6 +29,9 @@
 #define windowSizeY  600
 #define rendererSizeX  600
 #define rendererSizeY  600
+
+inline uint32_t toInt2( float fval ) { fval += 1<<23; return ((uint32_t)fval) & 0x007FFFFF; }
+#define F2INT(fval) (((uint32_t)((fval) + (1<<23)))&0x007FFFF)
 
 typedef struct{
 	float x,y;
@@ -64,14 +69,15 @@ struct{
     float amount;
 }cursor;
 
-struct{
+typedef struct{
 	float x,y;
 	float rot;
 	float zoom;
 	vec2f_t oldpos;
 	vec3f_t cursor;
 	int visibility[rendererSizeX*rendererSizeY];
-}cam;
+}camera_t;
+camera_t g_cam;
 
 #define MAPW 512
 #define MAPH 512
@@ -191,22 +197,22 @@ void loadColorMap(const char* path){
 }
 
 
-vec2f_t world2screen(float x, float y){
-	float sinAlpha = sin(cam.rot);
-	float cosAlpha = cos(cam.rot);
+vec2f_t world2screen(float x, float y, camera_t* camPtr){
+	float sinAlpha = sin(camPtr->rot);
+	float cosAlpha = cos(camPtr->rot);
 
 	//scale for zoom level
-	float xs = x / cam.zoom;
-	float ys = y / cam.zoom;
+	float xs = x / camPtr->zoom;
+	float ys = y / camPtr->zoom;
 	//project
 
 	//rotate 
-	float xw =  cosAlpha*(xs+(cam.x-614.911)) + sinAlpha*(ys+(cam.y-119.936)) - (cam.x-614.911);
-	float yw = -sinAlpha*(xs+(cam.x-614.911)) + cosAlpha*(ys+(cam.y-119.936)) - (cam.y-119.936);
-	//offset for camera position
+	float xw =  cosAlpha*(xs+(camPtr->x-614.911)) + sinAlpha*(ys+(camPtr->y-119.936)) - (camPtr->x-614.911);
+	float yw = -sinAlpha*(xs+(camPtr->x-614.911)) + cosAlpha*(ys+(camPtr->y-119.936)) - (camPtr->y-119.936);
+	//offset for camPtrera position
 
-	xs = xw + cam.x;
-	ys = yw + cam.y;
+	xs = xw + camPtr->x;
+	ys = yw + camPtr->y;
 	
 	xw = ((xs-ys)/sqrt(2));
 	yw = ((xs+ys)/sqrt(6));
@@ -216,25 +222,25 @@ vec2f_t world2screen(float x, float y){
 	return retVal;
 }
 
-vec2f_t screen2world(float x,float y){
-	float sinAlpha = sin(cam.rot);
-	float cosAlpha = cos(cam.rot);
+vec2f_t screen2world(float x,float y, camera_t* camPtr){
+	float sinAlpha = sin(camPtr->rot);
+	float cosAlpha = cos(camPtr->rot);
 	float sq2d2 = sqrt(2)/2;
 	float sq6d2 = sqrt(6)/2;
 	//transform screen coordinates to world coordinates 
 	float xw = sq2d2*x+sq6d2*y;
 	float yw = sq6d2*y-sq2d2*x;
-	xw = xw - cam.x;
-	yw = yw - cam.y;
+	xw = xw - camPtr->x;
+	yw = yw - camPtr->y;
 
 
 	//rotate view
-	float xwr = cosAlpha*(xw+(cam.x-614.911)) - sinAlpha*(yw+(cam.y-119.936)) - (cam.x-614.911);
-	float ywr = sinAlpha*(xw+(cam.x-614.911)) + cosAlpha*(yw+(cam.y-119.936)) - (cam.y-119.936);
+	float xwr = cosAlpha*(xw+(camPtr->x-614.911)) - sinAlpha*(yw+(camPtr->y-119.936)) - (camPtr->x-614.911);
+	float ywr = sinAlpha*(xw+(camPtr->x-614.911)) + cosAlpha*(yw+(camPtr->y-119.936)) - (camPtr->y-119.936);
 //616 121
 	//apply zoom
-	xw = xwr*cam.zoom;
-	yw = ywr*cam.zoom;
+	xw = xwr*camPtr->zoom;
+	yw = ywr*camPtr->zoom;
 	
 	vec2f_t retVal = {xw,yw};
 	//double xw = (cosAlpha*(cam.x+sq2d2*x+sq6d2*y-Map.w/2) - sinAlpha*(cam.y+sq6d2*y-sq2d2*x-Map.h/2)+Map.w/2)*cam.zoom;
@@ -245,7 +251,7 @@ vec2f_t screen2world(float x,float y){
 typedef struct{
 	SDL_Texture * Texture;
 	void * mPixels;
-	Uint32 * pixels;
+	uint32_t * pixels;
 	int w; 
 	int h;
 	int pitch;

@@ -17,6 +17,7 @@ uint32_t g_dtime_ms;
 
 uint32_t rendTexturePixels[rendererSizeX*rendererSizeY];
 uint32_t hudTexturePixels[windowSizeX*windowSizeY];
+uint32_t frameBuffer[windowSizeX*windowSizeY];
 
 sdlTexture rendTexture = {NULL,NULL,rendTexturePixels,rendererSizeX,rendererSizeY,rendererSizeX*sizeof(uint32_t)};
 sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,windowSizeX*sizeof(uint32_t)};
@@ -26,7 +27,7 @@ sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,wind
 float g_windowScaleX = 0.5f;
 float g_windowScaleY = 0.5f;
 
-
+atomic_int threadDone = 0;
 
 void generate_shadowmap(){
 
@@ -187,13 +188,13 @@ argb_t getTileColorLava(int xwti, int ywti, float shade){
 	*/
 }
 
-argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade){
+argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camera_t* camPtr){
 	
 		shade = min(shade, 1.f);
 		int r,g,b;
 		int posID = x + y * map.w;
 		float wtrHeight = map.water[4+x*5+y*map.w*5];
-		float camZoom = cam.zoom;
+		float camZoom = camPtr->zoom;
 		//calculate slope of water for highlighting and caustics
 		float slopX = -map.water[4+(x+1)*5 + (y)*map.w*5] + map.water[4+(x-1)*5 + (y)*map.w*5] - map.stone[(x+1) + (y)*map.w] + map.stone[(x-1) + (y)*map.w];
 		float slopY = map.water[4+(x)*5 + (y-1)*map.w*5] - map.water[4+(x)*5 + (y+1)*map.w*5] + map.stone[(x) + (y-1)*map.w] - map.stone[(x) + (y+1)*map.w];
@@ -414,10 +415,10 @@ argb_t getTileColorMist(int x, int y, int ys, vec2f_t upVec){
 
 
 //renders one pixel column
-void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float xwt,float ywt,float dDxw, float dDyw){
+void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec,float tileEdgeSlopeRight,float tileEdgeSlopeLeft,float xwt,float ywt,float dDxw, float dDyw, camera_t* camPtr){
 	//save some variables as local
-	float camZoom    = cam.zoom;
-	float camZoomDiv = 1.f / cam.zoom;
+	float camZoom    = camPtr->zoom;
+	float camZoomDiv = 1.f / camPtr->zoom;
 	
 	//init some variables
 	uint32_t argb; //store color of Pixel that will be drawn
@@ -452,7 +453,7 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 
 
 			ys = ys-(gndHeight+wtrHeight+mistHeight+lavaHeight)*camZoomDiv; //offset y by terrain height
-
+			if(ys < ybuffer){
 			//get color at worldspace and draw at screenspace
 			int r,g,b;
 
@@ -463,7 +464,7 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 			//	g = mistRGB.g;
 			//	b = mistRGB.b;
 			}else if(wtrHeight > 0){ //draw water if present
-				argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec,0.f);
+				argb_t waterARGB = getTileColorWater(xwti, ywti, ys, upVec, 0.f, camPtr);
 				r = waterARGB.r;
 				g = waterARGB.g;
 				b = waterARGB.b;
@@ -498,27 +499,27 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 //								 ywt - (int)ywt < borderWidth ||
 //								 (int)xwt+1 - xwt < borderWidth||
 //								 (int)ywt+1 - ywt < borderWidth){
-							r -= (int)(1*camZoomDiv);
-							g -= (int)(1*camZoomDiv);
-							b -= (int)(1*camZoomDiv);
+							r -= F2INT(1*camZoomDiv);
+							g -= F2INT(1*camZoomDiv);
+							b -= F2INT(1*camZoomDiv);
 //								 }
 			}
 
 
 			//clamp color values
-			argb = (min(max((int)r,0),255) << 16) | (min(max((int)g,0),255) << 8) | (min(max((int)b,0),255));
+			argb = (min(max(r,0),255) << 16) | (min(max(g,0),255) << 8) | (min(max(b,0),255));
 
 			ybuffer = min(ybuffer, rendTexture.h);
 			ys = max(ys, 0);
 			//only draw visible pixels
 			for(int Y=ybuffer-1;Y>=ys;Y--){
 
-				rendTexture.pixels[x + (Y)*rendTexture.w] = argb;	//draw pixels
+				frameBuffer[x + (Y)*rendTexture.w] = argb;	//draw pixels
 
 			}
 
 			ybuffer = ys; //save current highest point in pixel column
-
+			}
 		dPixels = 0; // reset delta Y pixels
 		//this piece of code calculates how many y pixels (dPixels) there is to the next tile
 		//and the border thing makes it so it only jumps one pixel when there is a
@@ -526,16 +527,16 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 		if(!border){ //!border
 			border = 1;
 			float testX,testY;
-			 if(cam.rot <= (45.f*3.141592654)/180.f || cam.rot > (315.f*3.141592654)/180.f ){
+			 if(camPtr->rot <= (45.f*3.141592654)/180.f || camPtr->rot > (315.f*3.141592654)/180.f ){
 				testX =  ( (xwt -(int)xwt))/dDxw;
 				testY =  ( (ywt -(int)ywt))/dDyw;
-			 }else if(cam.rot <= (135.f*3.141592654)/180.f ){
+			 }else if(camPtr->rot <= (135.f*3.141592654)/180.f ){
 				testX =  ((1-(xwt -(int)xwt))/dDxw);
 				testY =  (((ywt -(int)ywt))/dDyw);
-			 }else if(cam.rot <= (225.f*3.141592654)/180.f){
+			 }else if(camPtr->rot <= (225.f*3.141592654)/180.f){
 			  testX =  (1 - (xwt -(int)xwt))/dDxw;
 				testY =  (1 - (ywt -(int)ywt))/dDyw;
-			 }else if(cam.rot <= (315.f*3.141592654)/180.f ){
+			 }else if(camPtr->rot <= (315.f*3.141592654)/180.f ){
 				testX =  (((xwt -(int)xwt))/dDxw);
 				testY =  ((1-(ywt -(int)ywt))/dDyw);
 			 }
@@ -561,10 +562,19 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 
 
 void render(){
+	//Since this runs on a separate thread from input update I need to back up camera variables so they don't change during rendering
+	camera_t cam;
+	cam.rot = g_cam.rot;
+	cam.zoom = g_cam.zoom;
+	cam.x = g_cam.x;
+	cam.y = g_cam.y;
+	float camZoomDiv = 1.f / cam.zoom;
+
+
 	Uint32 rgb = (100 << 16) | (100 << 8) | (100);
 	for(int y=0;y<rendTexture.h;y++){
 		for(int x=0;x<rendTexture.w;x++){
-			rendTexture.pixels[x + y*rendTexture.w] = rgb;
+			frameBuffer[x + y*rendTexture.w] = rgb;
 		}
 	}
 
@@ -575,16 +585,16 @@ void render(){
 	//furstum
 	xs = 0;
 	ys = 0;
-	vec2f_t ftl = screen2world(xs,ys);
+	vec2f_t ftl = screen2world(xs,ys,&cam);
 	xs = rendTexture.w;
 	ys = rendTexture.h;
-	vec2f_t fbr = screen2world(xs,ys);
+	vec2f_t fbr = screen2world(xs,ys,&cam);
 	xs = 0;
 	ys = rendTexture.h;
-	vec2f_t fbl = screen2world(xs,ys);
+	vec2f_t fbl = screen2world(xs,ys,&cam);
 	xs = 0;
 	ys = rendTexture.h+100/cam.zoom;
-	vec2f_t fblb = screen2world(xs,ys);
+	vec2f_t fblb = screen2world(xs,ys,&cam);
 	
 	float dxw  = (fbr.x - fbl.x)/rendTexture.w; //delta x worldspace
 	float dyw  = (fbr.y - fbl.y)/rendTexture.w; //delta y worldspace
@@ -598,9 +608,7 @@ void render(){
 	upVec.y /= tempDistLongName;
 
 
-	//some stuff that I use
-	float camZoom = cam.zoom;
-	float camZoomDiv = 1/camZoom;
+
 	float sed,hei,sloX,sloY;
 	int water;
 
@@ -608,10 +616,10 @@ void render(){
 
 	///////// merge these calculations later
 	//calculate screen coordinates of world corners
-	vec2f_t tlw =world2screen(1,1);
-	vec2f_t trw =world2screen(map.w,1);
-	vec2f_t blw =world2screen(1,map.h);
-	vec2f_t brw =world2screen(map.w,map.h);
+	vec2f_t tlw =world2screen(1, 1, &cam);
+	vec2f_t trw =world2screen(map.w, 1, &cam);
+	vec2f_t blw =world2screen(1, map.h, &cam);
+	vec2f_t brw =world2screen(map.w, map.h, &cam);
 	//check what relative postion map corners have
 	vec2f_t mapCornerTop,mapCornerLeft,mapCornerBot,mapCornerRight;
 	if(fabsf(cam.rot) < 45*3.141592654/180 || fabsf(cam.rot) >= 315*3.141592654/180 ){
@@ -647,7 +655,7 @@ void render(){
 	int botMostYCoord = min((int)mapCornerBot.y, rendTexture.h+100/cam.zoom);
 	int topMostYCoord = max((int)mapCornerTop.y-100/cam.zoom, 0);
 
-	vec2f_t leftMostWorldCoord = screen2world(leftMostXCoord,botMostYCoord);
+	vec2f_t leftMostWorldCoord = screen2world(leftMostXCoord, botMostYCoord, &cam);
 
 	xw = leftMostWorldCoord.x; //set world coords to coresponding coords for bottom left of screen
 	yw = leftMostWorldCoord.y; //then iterate left to right, bottom to top of screen
@@ -656,7 +664,7 @@ void render(){
 		float xwt = xw; //make a copy of world coordinate for leftmost position at current depth
 		float ywt = yw;
 
-		renderColumn(x,botMostYCoord,topMostYCoord,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,xwt,ywt,dDxw,dDyw);
+		renderColumn(x,botMostYCoord,topMostYCoord,mapCornerBot,upVec,tileEdgeSlopeRight,tileEdgeSlopeLeft,xwt,ywt,dDxw,dDyw,&cam);
 		
 
 		xw += dxw; //update world coords corresponding to one pixel right
@@ -670,26 +678,13 @@ void render(){
 			uint32_t rgb = (255 << 16) | (255 << 8) | (255);
 			if(input.mouse.x-10 > 0 && input.mouse.x + 10 < rendTexture.w &&
 				input.mouse.y-10 > 0 && input.mouse.y + 10 < rendTexture.h ){
-					rendTexture.pixels[(cursor.screenX+x)+(cursor.screenY+y)*rendTexture.w] = rgb;
+					frameBuffer[(cursor.screenX+x)+(cursor.screenY+y)*rendTexture.w] = rgb;
 			}
 		}
 	}
 
 	
-	//calculate and print fps
-	static uint32_t frameCount = 0;
-	frameCount++;
-	static uint32_t timer_1000ms = 0;
-	static int fps;
-	if(g_time_ms - timer_1000ms > 1000){
-		timer_1000ms = g_time_ms;
-		fps = frameCount;
-		frameCount = 0;
-	}
 
-	char fpsStr[20];
-	sprintf(fpsStr,"FPS: %d",fps);
-	print(&rendTexture,fpsStr,10,10);
 }
 
 void renderHud(){
@@ -718,10 +713,10 @@ void init(){
 	map.w = MAPW;
 	map.h = MAPH;
 
-	cam.x = 150;
-	cam.y = -200;
-	cam.rot = 3.14f/2;
-	cam.zoom = 0.3;
+	g_cam.x = 150;
+	g_cam.y = -200;
+	g_cam.rot = 3.14f/2;
+	g_cam.zoom = 0.3;
 
 	cursor.amount = 0.3;
 	cursor.radius = 5;
@@ -751,12 +746,13 @@ void updateInput(){
 
 	cursor.screenX = (float)input.mouse.x * (float)g_windowScaleX;
 	cursor.screenY = (float)input.mouse.y * (float)g_windowScaleY;
-	vec2f_t pos = screen2world(cursor.screenX,cursor.screenY);
+	vec2f_t pos = screen2world(cursor.screenX, cursor.screenY, &g_cam);
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
-	
-	if(input.mouse.state == SDL_BUTTON_LEFT){
 
+	switch(input.mouse.state){
+	case SDL_BUTTON_LEFT:
+	{
 		float radius = cursor.radius;
 		for(int j=-radius;j<=radius;j++){
 			for(int k=-radius;k<=radius;k++){
@@ -766,86 +762,102 @@ void updateInput(){
 				}
 			}
 		}
-
 	}
+		break;
+	case 4: //RIGHT
+	{
+		float radius = cursor.radius;
+		for(int j=-radius;j<=radius;j++){
+			for(int k=-radius;k<=radius;k++){
+				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){
+//							map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+				}
+			}
+		}
+		map.flags.updateShadowMap = 1;
+	}
+		break;
+	}
+
+
 
 	if(keyboardState[SDL_SCANCODE_A]){
 
-			cam.x += cos(cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
-			cam.y += sin(cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
+			g_cam.x += cos(g_cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
+			g_cam.y += sin(g_cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
 
 	}
 	if(keyboardState[SDL_SCANCODE_D]){
 
-			cam.x -= cos(cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
-			cam.y -= sin(cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
+			g_cam.x -= cos(g_cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
+			g_cam.y -= sin(g_cam.rot-3.1415/4)*300 *g_dtime_ms / 1000;
 
 	}
 	if(keyboardState[SDL_SCANCODE_W]){
 
-			cam.x -= sin(cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
-			cam.y += cos(cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
+			g_cam.x -= sin(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
+			g_cam.y += cos(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
 
 	}
 	if(keyboardState[SDL_SCANCODE_S]){
 
-			cam.x += sin(cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
-			cam.y -= cos(cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
+			g_cam.x += sin(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
+			g_cam.y -= cos(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
 
 	}
 	if(keyboardState[SDL_SCANCODE_R]){
-			float rotation = cam.rot; //save camera rotation 
-			cam.rot = 0; //set camera rotation to 0
+			float rotation = g_cam.rot; //save camera rotation
+			g_cam.rot = 0; //set camera rotation to 0
 
-			vec2f_t pos1 = screen2world(rendTexture.w/2,rendTexture.h/2);
-			cam.zoom += 1 *cam.zoom *g_dtime_ms / 1000;
-			vec2f_t pos2 = world2screen(pos1.x,pos1.y);
+			vec2f_t pos1 = screen2world(rendTexture.w/2, rendTexture.h/2, &g_cam);
+			g_cam.zoom += 1 *g_cam.zoom *g_dtime_ms / 1000;
+			vec2f_t pos2 = world2screen(pos1.x, pos1.y, &g_cam);
 			vec2f_t deltapos = {rendTexture.w/2-pos2.x,rendTexture.h/2 -pos2.y};
 			//transform coordinate offset to isometric
 			double sq2d2 = sqrt(2)/2;
 			double sq6d2 = sqrt(6)/2;
 			double xw = sq2d2*deltapos.x+sq6d2*deltapos.y;
 			double yw = sq6d2*deltapos.y-sq2d2*deltapos.x;
-			cam.y += yw;
-			cam.x += xw;			
-			cam.rot = rotation; //restore camera rotation
+			g_cam.y += yw;
+			g_cam.x += xw;
+			g_cam.rot = rotation; //restore camera rotation
 	}
 	if(keyboardState[SDL_SCANCODE_F]){
-			if(cam.zoom > 0.03){
-				float rotation = cam.rot; //save camera rotation 
-				cam.rot = 0; //set camera rotation to 0
+			if(g_cam.zoom > 0.03){
+				float rotation = g_cam.rot; //save camera rotation
+				g_cam.rot = 0; //set camera rotation to 0
 
-				vec2f_t pos1 = screen2world(rendTexture.w/2,rendTexture.h/2);
-				cam.zoom -= 1 *cam.zoom *g_dtime_ms / 1000;
-				vec2f_t pos2 = world2screen(pos1.x,pos1.y);
-				vec2f_t deltapos = {rendTexture.w/2-pos2.x,rendTexture.h/2 -pos2.y};
+				vec2f_t pos1 = screen2world(rendTexture.w/2, rendTexture.h/2, &g_cam);
+				g_cam.zoom -= 1 *g_cam.zoom *g_dtime_ms / 1000;
+				vec2f_t pos2 = world2screen(pos1.x, pos1.y, &g_cam);
+				vec2f_t deltapos = {rendTexture.w/2-pos2.x, rendTexture.h/2 -pos2.y};
 				//transform coordinate offset to isometric
 				double sq2d2 = sqrt(2)/2;
 				double sq6d2 = sqrt(6)/2;
 				double xw = sq2d2*deltapos.x+sq6d2*deltapos.y;
 				double yw = sq6d2*deltapos.y-sq2d2*deltapos.x;
-				cam.y += yw;
-				cam.x += xw;			
-				cam.rot = rotation; //restore camera rotation
+				g_cam.y += yw;
+				g_cam.x += xw;
+				g_cam.rot = rotation; //restore camera rotation
 				
 			}
 	}
 	if(keyboardState[SDL_SCANCODE_Q]){
 		float angle = 32*3.14/180.f;
-		cam.rot = fmod((cam.rot - angle *2 *g_dtime_ms / 1000), 6.283185307);
-		if(cam.rot < 0) cam.rot = 6.283185307;
+		g_cam.rot = fmod((g_cam.rot - angle *2 *g_dtime_ms / 1000), 6.283185307);
+		if(g_cam.rot < 0) g_cam.rot = 6.283185307;
 			
 	}
 	if(keyboardState[SDL_SCANCODE_E]){
 		float angle = 32*3.14/180.f;
-		cam.rot = fmod((cam.rot + angle *2 *g_dtime_ms / 1000), 6.283185307);
+		g_cam.rot = fmod((g_cam.rot + angle *2 *g_dtime_ms / 1000), 6.283185307);
 				
 	}
 }
 
 void process(){
 
-	//add water
 
 	for(int y=2;y<map.h-2;y++){
 		float timeThingy = (float)g_time_ms;
@@ -854,7 +866,7 @@ void process(){
 		}
 	}
 
-	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+//	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
 
 	static int timer_100ms = 0;
 	if(g_time_ms - timer_100ms > 100){
@@ -881,7 +893,32 @@ void loop(){
 //		rendTexture.lock();
 	SDL_LockTexture(rendTexture.Texture,NULL,&(rendTexture.mPixels), &(rendTexture.pitch));
 	rendTexture.pixels = (uint32_t*)rendTexture.mPixels;
-	render();
+//	render();
+	if(threadDone == 1){
+
+	memcpy(rendTexture.pixels,frameBuffer,sizeof(frameBuffer));
+//	for(int y=0;y<rendererSizeY;y++){
+//		for(int x=0;x<rendererSizeX;x++){
+//			rendTexture.pixels[x+y*rendererSizeX] = frameBuffer[x+y*rendererSizeX];
+//		}
+//	}
+	//calculate and print fps
+	static uint32_t frameCount = 0;
+	frameCount++;
+	static uint32_t timer_1000ms = 0;
+	static int fps;
+	if(g_time_ms - timer_1000ms > 1000){
+		timer_1000ms = g_time_ms;
+		fps = frameCount;
+		frameCount = 0;
+	}
+
+	char fpsStr[20];
+	sprintf(fpsStr,"FPS: %d",fps);
+	print(&rendTexture,fpsStr,10,10);
+
+	threadDone = 0;
+	}
 	SDL_UnlockTexture(rendTexture.Texture);
 //    	rendTexture.unlock();
 
@@ -968,11 +1005,58 @@ EM_BOOL mouse_callback(int eventType, const EmscriptenMouseEvent *e, void *userD
   return 0;
 }
 
+/* this function is run by the second thread */
+void *render_thread()
+{
+
+while(1){
+	if(threadDone == 0){
+		render();
+		threadDone = 1;
+	}
+
+}
+/* the function must return something - NULL will do */
+return NULL;
+
+}
+
+/* this function is run by the second thread */
+void *update_water_thread()
+{
+	uint32_t timer = 1;
+while(1){
+	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 1.0f/(float)g_dtime_ms);
+}
+/* the function must return something - NULL will do */
+return NULL;
+
+}
 
 int main()
 {
-
 	init();
+
+	int x = 0, y = 0;
+
+	/* show the initial values of x and y */
+	printf("x: %d, y: %d\n", x, y);
+
+	/* this variable is our reference to the second thread */
+	pthread_t update_water_pthread;
+	pthread_t render_pthread;
+
+	/* create a second thread which executes inc_x(&x) */
+	if(pthread_create(&update_water_pthread, NULL, update_water_thread, NULL)) printf("Error creating thread\n");
+	if(pthread_create(&render_pthread, NULL, render_thread, NULL)) printf("Error creating thread\n");
+
+
+	/* wait for the second thread to finish */
+//	if(pthread_join(inc_x_thread, NULL)) {
+//
+//	printf("Error joining thread\n");
+//
+//	}
 
 
 	if ( SDL_Init( SDL_INIT_EVERYTHING ) == -1 )	{}
