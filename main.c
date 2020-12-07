@@ -27,7 +27,11 @@ sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,wind
 float g_windowScaleX = 0.5f;
 float g_windowScaleY = 0.5f;
 
+#if ENABLE_MULTITHREADING
 atomic_int threadDone = 0;
+#else
+int threadDone = 0;
+#endif
 
 void generate_shadowmap(){
 

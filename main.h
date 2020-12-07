@@ -13,8 +13,8 @@
 #define ENABLE_MULTITHREADING 0
 #if ENABLE_MULTITHREADING
 #include <pthread.h>
-#endif
 #include <stdatomic.h>
+#endif
 
 #define IS_FULLSCREEN 0
 
