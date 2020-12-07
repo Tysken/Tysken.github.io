@@ -13,7 +13,7 @@
 #include <stdatomic.h>
 
 #define IS_FULLSCREEN 0
-
+#define ENABLE_MULTITHREADING 0
 
 #define max(a,b) \
    ({ __typeof__ (a) _a = (a); \

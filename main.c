@@ -866,7 +866,9 @@ void process(){
 		}
 	}
 
-//	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+#if (ENABLE_MULTITHREADING == 0)
+	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+#endif
 
 	static int timer_100ms = 0;
 	if(g_time_ms - timer_100ms > 100){
@@ -893,8 +895,12 @@ void loop(){
 //		rendTexture.lock();
 	SDL_LockTexture(rendTexture.Texture,NULL,&(rendTexture.mPixels), &(rendTexture.pitch));
 	rendTexture.pixels = (uint32_t*)rendTexture.mPixels;
-//	render();
-	if(threadDone == 1){
+
+#if (ENABLE_MULTITHREADING == 0)
+	render();
+#endif
+
+	if(threadDone == 1 || ENABLE_MULTITHREADING == 0){
 
 	memcpy(rendTexture.pixels,frameBuffer,sizeof(frameBuffer));
 //	for(int y=0;y<rendererSizeY;y++){
@@ -1045,11 +1051,11 @@ int main()
 	/* this variable is our reference to the second thread */
 	pthread_t update_water_pthread;
 	pthread_t render_pthread;
-
+#if ENABLE_MULTITHREADING
 	/* create a second thread which executes inc_x(&x) */
 	if(pthread_create(&update_water_pthread, NULL, update_water_thread, NULL)) printf("Error creating thread\n");
 	if(pthread_create(&render_pthread, NULL, render_thread, NULL)) printf("Error creating thread\n");
-
+#endif
 
 	/* wait for the second thread to finish */
 //	if(pthread_join(inc_x_thread, NULL)) {

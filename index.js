@@ -196,7 +196,7 @@ Module.expectedDataFileDownloads++;
    "audio": 0
   } ],
   "remote_package_size": 6681028,
-  "package_uuid": "d5f9ef93-1539-4885-8c6c-b4b39f4676b6"
+  "package_uuid": "1ea79849-d526-4353-954d-66c77595f8a3"
  });
 })();
 
@@ -638,7 +638,7 @@ function updateGlobalBufferAndViews(buf) {
  Module["HEAPF64"] = HEAPF64 = new Float64Array(buf);
 }
 
-var STACK_BASE = 20528464, STACKTOP = STACK_BASE, STACK_MAX = 15285584;
+var STACK_BASE = 20528448, STACKTOP = STACK_BASE, STACK_MAX = 15285568;
 
 if (ENVIRONMENT_IS_PTHREAD) {}
 
@@ -915,7 +915,7 @@ var tempDouble;
 var tempI64;
 
 var ASM_CONSTS = {
- 55996: function($0, $1, $2) {
+ 55980: function($0, $1, $2) {
   var w = $0;
   var h = $1;
   var pixels = $2;
@@ -986,7 +986,7 @@ var ASM_CONSTS = {
   SDL2.ctx.putImageData(SDL2.image, 0, 0);
   return 0;
  },
- 57475: function($0, $1, $2, $3, $4) {
+ 57459: function($0, $1, $2, $3, $4) {
   var w = $0;
   var h = $1;
   var hot_x = $2;
@@ -1023,36 +1023,36 @@ var ASM_CONSTS = {
   stringToUTF8(url, urlBuf, url.length + 1);
   return urlBuf;
  },
- 58464: function($0) {
+ 58448: function($0) {
   if (Module["canvas"]) {
    Module["canvas"].style["cursor"] = UTF8ToString($0);
   }
   return 0;
  },
- 58557: function() {
+ 58541: function() {
   if (Module["canvas"]) {
    Module["canvas"].style["cursor"] = "none";
   }
  },
- 59782: function() {
+ 59766: function() {
   return screen.width;
  },
- 59809: function() {
+ 59793: function() {
   return screen.height;
  },
- 59837: function() {
+ 59821: function() {
   return window.innerWidth;
  },
- 59869: function() {
+ 59853: function() {
   return window.innerHeight;
  },
- 59947: function($0) {
+ 59931: function($0) {
   if (typeof setWindowTitle !== "undefined") {
    setWindowTitle(UTF8ToString($0));
   }
   return 0;
  },
- 60081: function() {
+ 60065: function() {
   if (typeof AudioContext !== "undefined") {
    return 1;
   } else if (typeof webkitAudioContext !== "undefined") {
@@ -1060,7 +1060,7 @@ var ASM_CONSTS = {
   }
   return 0;
  },
- 60247: function() {
+ 60231: function() {
   if (typeof navigator.mediaDevices !== "undefined" && typeof navigator.mediaDevices.getUserMedia !== "undefined") {
    return 1;
   } else if (typeof navigator.webkitGetUserMedia !== "undefined") {
@@ -1068,7 +1068,7 @@ var ASM_CONSTS = {
   }
   return 0;
  },
- 60473: function($0) {
+ 60457: function($0) {
   if (typeof Module["SDL2"] === "undefined") {
    Module["SDL2"] = {};
   }
@@ -1090,11 +1090,11 @@ var ASM_CONSTS = {
   }
   return SDL2.audioContext === undefined ? -1 : 0;
  },
- 61026: function() {
+ 61010: function() {
   var SDL2 = Module["SDL2"];
   return SDL2.audioContext.sampleRate;
  },
- 61096: function($0, $1, $2, $3) {
+ 61080: function($0, $1, $2, $3) {
   var SDL2 = Module["SDL2"];
   var have_microphone = function(stream) {
    if (SDL2.capture.silenceTimer !== undefined) {
@@ -1135,7 +1135,7 @@ var ASM_CONSTS = {
    }, have_microphone, no_microphone);
   }
  },
- 62748: function($0, $1, $2, $3) {
+ 62732: function($0, $1, $2, $3) {
   var SDL2 = Module["SDL2"];
   SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
   SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -1147,7 +1147,7 @@ var ASM_CONSTS = {
   };
   SDL2.audio.scriptProcessorNode["connect"](SDL2.audioContext["destination"]);
  },
- 63158: function($0, $1) {
+ 63142: function($0, $1) {
   var SDL2 = Module["SDL2"];
   var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
   for (var c = 0; c < numChannels; ++c) {
@@ -1166,7 +1166,7 @@ var ASM_CONSTS = {
    }
   }
  },
- 63763: function($0, $1) {
+ 63747: function($0, $1) {
   var SDL2 = Module["SDL2"];
   var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
   for (var c = 0; c < numChannels; ++c) {
@@ -1179,7 +1179,7 @@ var ASM_CONSTS = {
    }
   }
  },
- 64243: function($0) {
+ 64227: function($0) {
   var SDL2 = Module["SDL2"];
   if ($0) {
    if (SDL2.capture.silenceTimer !== undefined) {
@@ -1217,10 +1217,10 @@ var ASM_CONSTS = {
    SDL2.audioContext = undefined;
   }
  },
- 70892: function() {
+ 70876: function() {
   throw "Canceled!";
  },
- 71112: function($0, $1) {
+ 71096: function($0, $1) {
   setTimeout(function() {
    _do_emscripten_dispatch_to_thread($0, $1);
   }, 0);
@@ -8863,12 +8863,12 @@ if (!ENVIRONMENT_IS_PTHREAD) __ATINIT__.push({
 
 var asmLibraryArg = {
  "g": ___assert_fail,
- "ga": ___sys_fcntl64,
+ "fa": ___sys_fcntl64,
  "Zd": ___sys_ioctl,
  "_d": ___sys_open,
  "Vd": __emscripten_notify_thread_queue,
  "Ud": _abort,
- "B": _clock_gettime,
+ "A": _clock_gettime,
  "Td": _dlclose,
  "Sd": _eglBindAPI,
  "Rd": _eglChooseConfig,
@@ -8877,7 +8877,7 @@ var asmLibraryArg = {
  "Od": _eglDestroyContext,
  "Nd": _eglDestroySurface,
  "Md": _eglGetConfigAttrib,
- "da": _eglGetDisplay,
+ "ca": _eglGetDisplay,
  "Ld": _eglGetError,
  "Kd": _eglGetProcAddress,
  "Jd": _eglInitialize,
@@ -8896,7 +8896,7 @@ var asmLibraryArg = {
  "q": _emscripten_futex_wake,
  "p": _emscripten_get_device_pixel_ratio,
  "j": _emscripten_get_element_css_size,
- "ca": _emscripten_get_gamepad_status,
+ "ba": _emscripten_get_gamepad_status,
  "i": _emscripten_get_now,
  "zd": _emscripten_get_num_gamepads,
  "yd": _emscripten_get_preloaded_image_data,
@@ -9062,75 +9062,75 @@ var asmLibraryArg = {
  "Aa": _emscripten_glVertexAttribDivisorANGLE,
  "za": _emscripten_glVertexAttribPointer,
  "ya": _emscripten_glViewport,
- "A": _emscripten_has_asyncify,
+ "z": _emscripten_has_asyncify,
  "m": _emscripten_is_main_browser_thread,
  "xa": _emscripten_is_main_runtime_thread,
  "f": _emscripten_longjmp,
  "wa": _emscripten_memcpy_big,
  "va": _emscripten_receive_on_main_thread_js,
  "ua": _emscripten_request_fullscreen_strategy,
- "ba": _emscripten_request_pointerlock,
+ "aa": _emscripten_request_pointerlock,
  "ta": _emscripten_resize_heap,
- "aa": _emscripten_sample_gamepad_data,
- "$": _emscripten_set_beforeunload_callback_on_thread,
- "_": _emscripten_set_blur_callback_on_thread,
+ "$": _emscripten_sample_gamepad_data,
+ "_": _emscripten_set_beforeunload_callback_on_thread,
+ "Z": _emscripten_set_blur_callback_on_thread,
  "l": _emscripten_set_canvas_element_size,
- "Z": _emscripten_set_current_thread_status,
- "z": _emscripten_set_element_css_size,
- "Y": _emscripten_set_focus_callback_on_thread,
- "X": _emscripten_set_fullscreenchange_callback_on_thread,
- "W": _emscripten_set_gamepadconnected_callback_on_thread,
- "V": _emscripten_set_gamepaddisconnected_callback_on_thread,
- "U": _emscripten_set_keydown_callback_on_thread,
- "T": _emscripten_set_keypress_callback_on_thread,
- "S": _emscripten_set_keyup_callback_on_thread,
+ "Y": _emscripten_set_current_thread_status,
+ "y": _emscripten_set_element_css_size,
+ "X": _emscripten_set_focus_callback_on_thread,
+ "W": _emscripten_set_fullscreenchange_callback_on_thread,
+ "V": _emscripten_set_gamepadconnected_callback_on_thread,
+ "U": _emscripten_set_gamepaddisconnected_callback_on_thread,
+ "T": _emscripten_set_keydown_callback_on_thread,
+ "S": _emscripten_set_keypress_callback_on_thread,
+ "R": _emscripten_set_keyup_callback_on_thread,
  "sa": _emscripten_set_main_loop,
- "R": _emscripten_set_mousedown_callback_on_thread,
- "Q": _emscripten_set_mouseenter_callback_on_thread,
- "P": _emscripten_set_mouseleave_callback_on_thread,
- "y": _emscripten_set_mousemove_callback_on_thread,
- "O": _emscripten_set_mouseup_callback_on_thread,
- "N": _emscripten_set_pointerlockchange_callback_on_thread,
- "x": _emscripten_set_resize_callback_on_thread,
- "M": _emscripten_set_touchcancel_callback_on_thread,
- "L": _emscripten_set_touchend_callback_on_thread,
- "K": _emscripten_set_touchmove_callback_on_thread,
- "J": _emscripten_set_touchstart_callback_on_thread,
- "I": _emscripten_set_visibilitychange_callback_on_thread,
- "H": _emscripten_set_wheel_callback_on_thread,
- "w": _emscripten_sleep,
+ "Q": _emscripten_set_mousedown_callback_on_thread,
+ "P": _emscripten_set_mouseenter_callback_on_thread,
+ "O": _emscripten_set_mouseleave_callback_on_thread,
+ "x": _emscripten_set_mousemove_callback_on_thread,
+ "N": _emscripten_set_mouseup_callback_on_thread,
+ "M": _emscripten_set_pointerlockchange_callback_on_thread,
+ "w": _emscripten_set_resize_callback_on_thread,
+ "L": _emscripten_set_touchcancel_callback_on_thread,
+ "K": _emscripten_set_touchend_callback_on_thread,
+ "J": _emscripten_set_touchmove_callback_on_thread,
+ "I": _emscripten_set_touchstart_callback_on_thread,
+ "H": _emscripten_set_visibilitychange_callback_on_thread,
+ "G": _emscripten_set_wheel_callback_on_thread,
+ "v": _emscripten_sleep,
  "ra": _emscripten_webgl_create_context,
  "Yd": _environ_get,
  "Xd": _environ_sizes_get,
- "fa": _fd_close,
+ "ea": _fd_close,
  "Wd": _fd_read,
  "ma": _fd_seek,
- "ea": _fd_write,
+ "da": _fd_write,
  "b": _getTempRet0,
- "G": get_browser_height,
- "F": get_browser_width,
- "v": _gettimeofday,
+ "F": get_browser_height,
+ "E": get_browser_width,
+ "u": _gettimeofday,
  "qa": initPthreadsJS,
  "pa": invoke_i,
- "u": invoke_ii,
- "t": invoke_iii,
- "E": invoke_iiii,
+ "t": invoke_ii,
+ "s": invoke_iii,
+ "D": invoke_iiii,
  "oa": invoke_iiiii,
  "na": invoke_iiiiiiiii,
- "D": invoke_iiiiiiiiii,
+ "C": invoke_iiiiiiiiii,
  "la": invoke_ji,
  "ka": invoke_jiji,
  "k": invoke_vi,
  "o": invoke_vii,
- "C": invoke_viii,
+ "B": invoke_viii,
  "a": wasmMemory,
  "ja": _pthread_cleanup_push,
- "s": _pthread_create,
- "ia": _pthread_join,
+ "ia": _pthread_create,
+ "ha": _pthread_join,
  "d": _pthread_self,
  "c": _setTempRet0,
  "h": _sigaction,
- "ha": _signal
+ "ga": _signal
 };
 
 var asm = createWasm();
@@ -9275,7 +9275,7 @@ var dynCall_jiji = Module["dynCall_jiji"] = function() {
  return (dynCall_jiji = Module["dynCall_jiji"] = Module["asm"]["Ie"]).apply(null, arguments);
 };
 
-var _main_thread_futex = Module["_main_thread_futex"] = 15284528;
+var _main_thread_futex = Module["_main_thread_futex"] = 15284512;
 
 function invoke_ii(index, a1) {
  var sp = stackSave();
