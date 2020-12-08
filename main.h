@@ -41,6 +41,13 @@
 #define rendererSizeX  600
 #define rendererSizeY  600
 
+//Map size (fluid and other)
+#define MAPW 512
+#define MAPH 512
+
+//max foam particle number
+#define FOAMSIZE 100000
+
 inline uint32_t toInt2( float fval ) { fval += 1<<23; return ((uint32_t)fval) & 0x007FFFFF; }
 #define F2INT(fval) (((uint32_t)((fval) + (1<<23)))&0x007FFFF)
 
@@ -90,21 +97,49 @@ typedef struct{
 }camera_t;
 camera_t g_cam;
 
-#define MAPW 512
-#define MAPH 512
+
+typedef struct{
+	int size;
+	int counter;
+	float time[FOAMSIZE];
+	Uint8 on[FOAMSIZE];
+	float posX[FOAMSIZE];
+	float posY[FOAMSIZE];
+	float velX[FOAMSIZE];
+	float velY[FOAMSIZE];
+	float amount[FOAMSIZE]; //total amount of foam in position
+}foam_t;
+
+foam_t foam;
+
+
 
 struct{
 	int w;
     int h;
+    float tileWidth; //width of one tile, used for adjusting fluid simulation
     argb_t argb[MAPW*MAPH];
     float shadow[MAPW*MAPH];
     float shadowSoft[MAPW*MAPH];
     float stone[MAPW*MAPH];
     float water[5*MAPW*MAPH]; //water
+    float waterVel[MAPW*MAPH*2];//X/Y
+    float foamLevel[MAPW*MAPH];
     struct{
     	unsigned int updateShadowMap: 1;
     }flags;
 }map;
+
+//TODO: change to take pointer to fluid object when that is implemented
+void update_fluid_velocity(){
+	for(int y=0;y<map.h;y++){ //TODO:change to load height/width from some parameter
+		for(int x=0;x<map.w;x++){
+			map.waterVel[0+x*2+y*map.w*2] = ( map.water[0+x*5+y*map.w*5] - map.water[2+(x)*5+(y)*map.w*5]) / (map.tileWidth*map.tileWidth); //X
+			map.waterVel[1+x*2+y*map.w*2] = (-map.water[3+x*5+y*map.w*5] + map.water[1+(x)*5+(y)*map.w*5]) / (map.tileWidth*map.tileWidth); //Y
+		}
+	}
+}
+
 
 //ändra water till att vara en array av struct fluid med medlemmarna height, left, osv
 
@@ -154,6 +189,8 @@ void water_update(float* fluid, float g, float l, float A, float friction, float
     }
     
 }
+
+
 
 Uint32 getpixel(SDL_Surface *surface, int x, int y);
 

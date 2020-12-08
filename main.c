@@ -213,14 +213,16 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 					test2 = (x+(int)(upVec.x*i))+(y+(int)(upVec.y*i))*map.w;
 					int newX = (x+(int)(upVec.x*i));
 					int newY = (y+(int)(upVec.y*i));
-					float caustic =  (map.water[4+(newX+1)*5+newY*map.w*5] - map.water[4+(newX-1)*5+newY*map.w*5] + map.stone[test2+1] - map.stone[test2-1] +
-					map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;
-					if(seaFloorPosX <= 2 || seaFloorPosX >= map.w-2 || seaFloorPosY <= 2 || seaFloorPosY >= map.h-2) caustic = 0;
+					float caustic = 0;
+					if(!(seaFloorPosX <= 2 || seaFloorPosX >= map.w-2 || seaFloorPosY <= 2 || seaFloorPosY >= map.h-2)){
+						caustic =  (map.water[4+(newX+1)*5+newY*map.w*5] - map.water[4+(newX-1)*5+newY*map.w*5] + map.stone[test2+1] - map.stone[test2-1] +
+							map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;
+					}
 					float foamShadow = 0;//map.foamLevel[test2] * 0.2;
 					underwaterFoam = max(min(underwaterFoam,100),0);
-					r =	map.argb[test2].r + (caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
-					g =	map.argb[test2].g + (caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
-					b =	map.argb[test2].b + (caustic - foamShadow + underwaterFoam)*(1-min(shade,1.0f));
+					r =	map.argb[test2].r ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
+					g =	map.argb[test2].g ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
+					b =	map.argb[test2].b ;//+ (-caustic - foamShadow + underwaterFoam)*(1-min(shade,1.0f));
 					
 					//lerp between hard and soft shadows depending on the depth
 					int shadow;
@@ -235,10 +237,9 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 					break;
 				}
 				if(seaFloorPosX < 1 || seaFloorPosX >= map.w-1 || seaFloorPosY < 1 || seaFloorPosY >= map.h-1){
-				
-						r = (102+(int)ys)>>2;//67
-						g = (192+(int)ys)>>2;//157
-						b = (229+(int)ys)>>2;//197	
+					r = (102+(int)ys)>>2;//67
+					g = (192+(int)ys)>>2;//157
+					b = (229+(int)ys)>>2;//197
 					break;
 				}
 			}
@@ -254,16 +255,16 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 				caustic =  (map.water[4+(seaFloorPosX+1)*5+(seaFloorPosY)*map.w*5] - map.water[4+(seaFloorPosX-1)*5+(seaFloorPosY)*map.w*5] + map.stone[seaFloorPos+1] - map.stone[seaFloorPos-1] +
 										map.water[4+(seaFloorPosX)*5+(seaFloorPosY+1)*map.w*5] - map.water[4+(seaFloorPosX)*5+(seaFloorPosY-1)*map.w*5] + map.stone[seaFloorPos+1*map.w] - map.stone[seaFloorPos-1*map.w])*10;	
 			}
-			r =	map.argb[posID].r + (caustic - foamShadow)*(1-shade);
-			g =	map.argb[posID].g + (caustic - foamShadow)*(1-shade);
-			b =	map.argb[posID].b + (caustic - foamShadow)*(1-shade);
+//			r =	map.argb[posID].r + (caustic - foamShadow)*(1-shade);
+//			g =	map.argb[posID].g + (caustic - foamShadow)*(1-shade);
+//			b =	map.argb[posID].b + (caustic - foamShadow)*(1-shade);
 		}					
 		if(1){//water surface
 			
 			//highligt according to slope
-			r += -20+(slopX+slopY)*1;
-			g += -10*1+(int)(wtrHeight*camZoom*4*1+((slopX+slopY)*1));
-			b += -4*1+(int)(wtrHeight*camZoom*20*1+((slopX+slopY)*1));
+			r += -25 - wtrHeight*4      + (slopX*slopX+slopY*slopY)*1;
+			g += -16 - wtrHeight*2    + (slopX*slopX+slopY*slopY)*2;
+			b += -8  - wtrHeight*1   + (slopX*slopX+slopY*slopY)*2;
 			//if slope is certain angle, make water whiter to look like glare from sun
 			if(slopX + slopY > 0.1 && slopX + slopY < 1){
 				if(slopX + slopY > 0.5 && slopX + slopY < 1){
@@ -300,11 +301,11 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 //			}
 		}
 	//draw foam
-//	if(map.foamLevel[x + y*map.w] > 0){
-//		r += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f));
-//		g += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f));
-//		b += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f));
-//	}
+	if(map.foamLevel[x + y*map.w] > 0){
+		r += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f))*1;
+		g += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f))*1;
+		b += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f))*1;
+	}
 	
 	//apply shadow on water
 	float shadow = map.shadow[x+y*map.w]*(1-min(shade,1.0f));
@@ -485,9 +486,18 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 				r -= map.shadow[posID];
 				g -= map.shadow[posID];
 				b -= map.shadow[posID];
+				if(      map.foamLevel[xwti + ywti*map.w] > 0){
+//					r += map.foamLevel[xwti + ywti*map.w];
+//					g += map.foamLevel[xwti + ywti*map.w];
+//					b += map.foamLevel[xwti + ywti*map.w];
+				}
 
 			}
-
+//			if(      map.foamLevel[xwti + ywti*map.w] > 0){
+//					r += 255;
+//					g += 255;
+//					b += 255;
+//				}
 
 			//calculate and draw cursor
 			if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
@@ -716,6 +726,7 @@ void init(){
 
 	map.w = MAPW;
 	map.h = MAPH;
+	map.tileWidth = 1.f;
 
 	g_cam.x = 150;
 	g_cam.y = -200;
@@ -732,6 +743,9 @@ void init(){
 
 	map.flags.updateShadowMap = 1; //make sure shadows are updated after map load
 
+
+	memset(&foam,0,sizeof(foam));
+	foam.size = FOAMSIZE;
 
 
 
@@ -862,16 +876,87 @@ void updateInput(){
 
 void process(){
 
+	update_fluid_velocity();
 
-	for(int y=2;y<map.h-2;y++){
-		float timeThingy = (float)g_time_ms;
-		if(map.stone[1+y*map.w] < 20.f){
-	//		map.water[4+1*5+y*map.w*5] += -4.f*cos((float)g_time_ms/4000.f)+4.f;
+	//foam
+	//spawn foam where water is turbulent
+	for(int y=1;y<map.h-1;y++){
+		for(int x=1;x<map.w-1;x++){
+
+			float velX = map.waterVel[0+x*2+y*map.w*2];
+			float velY = map.waterVel[1+x*2+y*map.w*2];
+			//curl is something, velDiff is speed difference with nearby tiles
+			float curl = map.waterVel[1+(x+1)*2+y*map.w*2] - map.waterVel[1+(x-1)*2+y*map.w*2] - map.waterVel[0+x*2+(y+1)*map.w*2] + map.waterVel[1+x*2+(y-1)*map.w*2];
+			float velDiff = velX*2 - map.waterVel[0+(x-1)*2+(y)*map.w*2] - map.waterVel[0+(x+1)*2+(y)*map.w*2] + velY*2 - map.waterVel[1+x*2+(y-1)*map.w*2] - map.waterVel[1+x*2+(y+1)*map.w*2];
+			if((fabsf(velDiff) > 10 || fabsf(curl) > 5)){
+				foam.amount[foam.counter%foam.size] = 2;
+				foam.on[foam.counter%foam.size] = 1;
+				foam.posX[foam.counter%foam.size] = x;
+				foam.posY[foam.counter%foam.size] = y;
+				foam.velX[foam.counter%foam.size] = velX;
+				foam.velY[foam.counter%foam.size] = velY;
+				foam.counter ++;
+			}
+
 		}
 	}
 
+
+	//update velocity
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			foam.velX[i] = map.waterVel[0+(int)foam.posX[i]*2+(int)foam.posY[i]*map.w*2]*0.1;
+		}
+	}
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			foam.velY[i] = map.waterVel[1+(int)foam.posX[i]*2+(int)foam.posY[i]*map.w*2]*0.1;
+		}
+	}
+
+
+
+	//update position
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			foam.posX[i] += foam.velX[i];
+		}
+
+	}
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			foam.posY[i] -= foam.velY[i];
+		}
+	}
+
+	//remove foam on land or lavafoam outside lava
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			int x = foam.posX[i];
+			int y = foam.posY[i];
+			if(x <= 1 || x >= map.w-1 || y <= 1 || y >= map.h-1 /*|| (H[0+x*4+y*map.w*4] <= 0)*/){
+				foam.on[i] = 0;
+			}
+		}
+	}
+
+	//clear foamlevels and update with new levels
+
+	memset(map.foamLevel, 0 , sizeof(*map.foamLevel)*map.w*map.h);
+
+
+	for(int i=0;i<foam.size;i++){
+		if(foam.on[i]){
+			int x = foam.posX[i];
+			int y = foam.posY[i];
+			if(map.foamLevel[x+y*map.w] < 155) map.foamLevel[x+y*map.w] += foam.amount[i];
+			else foam.on[i] = 0;
+		}
+	}
+
+
 #if (ENABLE_MULTITHREADING == 0)
-	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, 0.15f);
+	water_update(map.water, 9.81f, 1.f, 1.f, 1.0f, 0.15f);
 #endif
 
 	static int timer_100ms = 0;
