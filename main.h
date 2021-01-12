@@ -18,6 +18,9 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
 
+#include "draw.h"
+#include "gui.h"
+
 #define ENABLE_MULTITHREADING 0
 #if ENABLE_MULTITHREADING
 #include <pthread.h>
@@ -35,21 +38,25 @@
    ({ __typeof__ (a) _a = (a); \
        __typeof__ (b) _b = (b); \
      _a < _b ? _a : _b; })
+#define M_PI    3.14159265358979323846264338327950288   /* pi */
 
-#define windowSizeX  600
-#define windowSizeY  600
+#define windowSizeX    800
+#define windowSizeY    600
+#define hudSizeX       200
+#define hudSizeY       600
 #define rendererSizeX  600
 #define rendererSizeY  600
 
 //Map size (fluid and other)
-#define MAPW 512
-#define MAPH 512
+#define MAPW 256
+#define MAPH 256
 
 //max foam particle number
 #define FOAMSIZE 100000
 
 inline uint32_t toInt2( float fval ) { fval += 1<<23; return ((uint32_t)fval) & 0x007FFFFF; }
 #define F2INT(fval) (((uint32_t)((fval) + (1<<23)))&0x007FFFF)
+#define ROUNDF(x) ((int)(x + 0.5f))
 
 typedef struct{
 	float x,y;
@@ -60,23 +67,14 @@ typedef struct{
 }vec2i_t;
 
 typedef struct{
+	uint16_t x,y;
+}vec2i16_t;
+
+typedef struct{
 	float x,y,z;
 }vec3f_t;
 
 
-typedef struct{
-	uint8_t b,g,r,a;
-}argb_t;
-
-struct{
-	struct{
-        int x;
-        int y;
-        int offsetX; //an offset is needed if the html canvas size isn't 1:1 with the SDL window size
-        int offsetY;
-		uint32_t state;
-	}mouse;
-}input;
 
 struct{
     int screenX;
@@ -99,20 +97,28 @@ camera_t g_cam;
 
 
 typedef struct{
-	int size;
-	int counter;
-	float time[FOAMSIZE];
-	Uint8 on[FOAMSIZE];
-	float posX[FOAMSIZE];
-	float posY[FOAMSIZE];
-	float velX[FOAMSIZE];
-	float velY[FOAMSIZE];
-	float amount[FOAMSIZE]; //total amount of foam in position
+	uint32_t size;
+	uint32_t counter;
+	vec2f_t pos[FOAMSIZE];
+//	vec2f_t vel[FOAMSIZE];
+	struct{
+		uint8_t on :1;
+		uint8_t amount :7;
+	}status[FOAMSIZE];
+//	uint8_t amount[FOAMSIZE]; //total amount of foam in position
+//	uint8_t on[FOAMSIZE];
 }foam_t;
 
 foam_t foam;
 
 
+typedef struct{
+	float right;
+	float down;
+	float left;
+	float up;
+	float depth;
+}fluid_t;
 
 struct{
 	int w;
@@ -122,77 +128,193 @@ struct{
     float shadow[MAPW*MAPH];
     float shadowSoft[MAPW*MAPH];
     float stone[MAPW*MAPH];
-    float water[5*MAPW*MAPH]; //water
-    float waterVel[MAPW*MAPH*2];//X/Y
+    float sand[MAPW*MAPH];
+    float height[MAPW*MAPH];
+    float susSed[MAPW*MAPH];
+    float susSed2[MAPW*MAPH];
+    float sandTemp[MAPW*MAPH];
+//    float water[5*MAPW*MAPH]; //water
+    fluid_t water[MAPW*MAPH];
+    vec2f_t waterVel[MAPW*MAPH];//X/Y
     float foamLevel[MAPW*MAPH];
     struct{
     	unsigned int updateShadowMap: 1;
     }flags;
 }map;
 
-//TODO: change to take pointer to fluid object when that is implemented
-void update_fluid_velocity(){
-	for(int y=0;y<map.h;y++){ //TODO:change to load height/width from some parameter
-		for(int x=0;x<map.w;x++){
-			map.waterVel[0+x*2+y*map.w*2] = ( map.water[0+x*5+y*map.w*5] - map.water[2+(x)*5+(y)*map.w*5]) / (map.tileWidth*map.tileWidth); //X
-			map.waterVel[1+x*2+y*map.w*2] = (-map.water[3+x*5+y*map.w*5] + map.water[1+(x)*5+(y)*map.w*5]) / (map.tileWidth*map.tileWidth); //Y
-		}
-	}
+EM_JS(int, get_browser_width, (), {
+  return window.innerWidth;
+});
+
+EM_JS(int, get_browser_height, (), {
+  return window.innerHeight;
+});
+
+float lerp(float s, float e, float t){return s+(e-s)*t;}
+float blerp(float c00, float c10, float c01, float c11, float tx, float ty){
+    return lerp(lerp(c00, c10, tx), lerp(c01, c11, tx), ty);
 }
-
-
-//ändra water till att vara en array av struct fluid med medlemmarna height, left, osv
-
-void water_update(float* fluid, float g, float l, float A, float friction, float dTime){
+void water_update(fluid_t* fluid, float g, float l, float A, float friction, float dTime){
     float* T = map.stone;
-    float* W = fluid;
+    fluid_t* f = fluid; //shorter name
 
-    for(int y=1;y<MAPH-1;y++){
-        for(int x=1;x<MAPW-1;x++){
-        	//if fluid flow to cell equals flow from cell (constant flow) then the cell does not need to be updated
-        	if((W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]+W[4+x*5+y*MAPW*5]) == 0)continue;
+    for(int y=1;y<MAPH-2;y++){
+        for(int x=1;x<MAPW-2;x++){
+        	int yw = y*MAPW;
+        	//if fluid depth is really low then the remaining fluid is cleared and the rest of the calculations skipped
+        	if(f[x+yw].depth < 0.0001f){
+        		f[x+yw].depth = 0.f;
+        		f[x+yw].down = 0.f;
+        		f[x+yw].left = 0.f;
+        		f[x+yw].right = 0.f;
+        		f[x+yw].up = 0.f;
+        		continue;
+        	}else{
+        		f[x+yw].depth -= 0.0001f;
+        		f[x+yw].down  -= 0.0001f;
+        		f[x+yw].left  -= 0.0001f;
+        		f[x+yw].right -= 0.0001f;
+        		f[x+yw].up    -= 0.0001f;
+        	}
 
-            W[0+x*5+y*MAPW*5] = max(W[0+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x+1)*5+y*MAPW*5]-T[(x+1)+y*MAPW])     *dTime*A*g/l , 0.f); //höger
-            W[1+x*5+y*MAPW*5] = max(W[1+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y-1)*MAPW*5]-T[(x)+(y-1)*MAPW]) *dTime*A*g/l , 0.f); //upp
-            W[2+x*5+y*MAPW*5] = max(W[2+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x-1)*5+y*MAPW*5]-T[(x-1)+y*MAPW])     *dTime*A*g/l , 0.f); //vänster
-            W[3+x*5+y*MAPW*5] = max(W[3+x*5+y*MAPW*5]*friction + (W[4+x*5+y*MAPW*5]+T[x+y*MAPW]-W[4+(x)*5+(y+1)*MAPW*5]-T[(x)+(y+1)*MAPW]) *dTime*A*g/l , 0.f); //ner
+            f[x+yw].right = max(f[x+yw].right*friction + (f[x+yw].depth+T[x+y*MAPW]+map.sand[x+y*MAPW] -f[(x+1)+(yw)].depth     -T[(x+1)+y*MAPW]-map.sand[(x+1)+y*MAPW])     *dTime*A*g/l , 0.f); //höger
+            f[x+yw].down  = max(f[x+yw].down*friction  + (f[x+yw].depth+T[x+y*MAPW]+map.sand[x+y*MAPW] -f[x+(yw-1*MAPW)].depth  -T[(x)+(y-1)*MAPW]-map.sand[(x)+(y-1)*MAPW]) *dTime*A*g/l , 0.f); //upp
+            f[x+yw].left  = max(f[x+yw].left*friction  + (f[x+yw].depth+T[x+y*MAPW]+map.sand[x+y*MAPW] -f[(x-1)+yw].depth       -T[(x-1)+y*MAPW]-map.sand[(x-1)+y*MAPW])     *dTime*A*g/l , 0.f); //vänster
+            f[x+yw].up    = max(f[x+yw].up*friction    + (f[x+yw].depth+T[x+y*MAPW]+map.sand[x+y*MAPW] -f[x+(yw+1*MAPW)].depth  -T[(x)+(y+1)*MAPW]-map.sand[(x)+(y+1)*MAPW]) *dTime*A*g/l , 0.f); //ner
             
             
             //make sure flow out of cell isn't greater than inflow + existing fluid
-            if(W[4+x*5+y*MAPW*5] - (W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]) < 0){
-                float K = min(W[4+x*5+y*MAPW*5]*l*l/((W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5])*dTime) , 1.f);
-                W[0+x*5+y*MAPW*5] *= K;
-                W[1+x*5+y*MAPW*5] *= K;
-                W[2+x*5+y*MAPW*5] *= K;
-                W[3+x*5+y*MAPW*5] *= K;
+            if(f[x+yw].depth - (f[x+yw].right+f[x+yw].down+f[x+yw].left+f[x+yw].up) < 0){
+                float K = min(f[x+yw].depth*l*l/((f[x+yw].right+f[x+yw].down+f[x+yw].left+f[x+yw].up)*dTime) , 1.f);
+                f[x+yw].right *= K;
+                f[x+yw].down *= K;
+                f[x+yw].left *= K;
+                f[x+yw].up *= K;
             }
         }
     }
     //border conditions
     for(int y=0;y<MAPH;y++){
-        W[0+(MAPW-2)*5+y*MAPW*5] = 0;
-        W[2+(2)*5+y*MAPW*5] = 0;
+    	f[(MAPW-2)+y*MAPW].right = 0;
+    	f[2+y*MAPW].left = 0;
     }
     for(int x=0;x<MAPW;x++){
-        W[1+(x)*5+(2)*MAPW*5] = 0;
-        W[3+(x)*5+(MAPH-2)*MAPW*5] = 0;
+    	f[x+2*MAPW].down = 0;
+    	f[x+(MAPH-2)*MAPW].up = 0;
     }
     
     //update depth
-    for(int y=1;y<MAPH-1;y++){
-        for(int x=1;x<MAPW-1;x++){
-            float deltaV = (W[0+(x-1)*5+y*MAPW*5]+W[1+x*5+(y+1)*MAPW*5]+W[2+(x+1)*5+y*MAPW*5]+W[3+x*5+(y-1)*MAPW*5] - (W[0+x*5+y*MAPW*5]+W[1+x*5+y*MAPW*5]+W[2+x*5+y*MAPW*5]+W[3+x*5+y*MAPW*5]))*dTime;
-            W[4+(x)*5+(y)*MAPW*5] = max(W[4+(x)*5+(y)*MAPW*5] + deltaV/(l*l), 0.f);
+    for(int y=1;y<MAPH-2;y++){
+        for(int x=1;x<MAPW-2;x++){
+            float deltaV = (f[(x-1)+(y)*MAPW].right+f[(x)+(y+1)*MAPW].down+f[(x+1)+(y)*MAPW].left+f[(x)+(y-1)*MAPW].up - (f[(x)+(y)*MAPW].right+f[(x)+(y)*MAPW].down+f[(x)+(y)*MAPW].left+f[(x)+(y)*MAPW].up))*dTime;
+            if(deltaV < 0.0001f && deltaV > -0.0001) continue;
+            f[(x)+(y)*MAPW].depth = max(f[(x)+(y)*MAPW].depth + deltaV/(l*l), 0.f);
 
+            //calculate velocity
+			map.waterVel[x+y*map.w].x = ( f[(x-1)+(y)*MAPW].right - f[(x)+(y)*MAPW].left + f[(x)+(y)*MAPW].right - f[(x+1)+(y)*MAPW].left) / (2); //X
+			map.waterVel[x+y*map.w].y = ( f[(x-1)+(y)*MAPW].down - f[(x)+(y)*MAPW].up + f[(x)+(y)*MAPW].down - f[(x+1)+(y)*MAPW].up) / (2); //Y
 
         }
     }
     
+    //erosion/deposition of sediment
+    // https://ranmantaru.com/blog/2011/10/08/water-erosion-on-heightmap-terrain/
+    // https://old.cescg.org/CESCG-2011/papers/TUBudapest-Jako-Balazs.pdf
+    // https://hal.inria.fr/file/index/docid/402079/filename/FastErosion_PG07.pdf chapter 3.3
+    memcpy(map.sandTemp,map.sand,sizeof(map.sand));
+    for(int y=1;y<MAPH-2;y++){
+		for(int x=1;x<MAPW-2;x++){
+			//calculate tilt https://math.stackexchange.com/questions/1044044/local-tilt-angle-based-on-height-field
+			float tiltX = (T[(x+1)+y*map.w]+map.sand[(x+1)+y*map.w] - T[(x-1+y*map.w)]-map.sand[(x-1+y*map.w)]) / 2.f;
+			float tiltY = (T[(x)+(y+1)*map.w]+map.sand[(x)+(y+1)*map.w] - T[(x+(y-1)*map.w)]-map.sand[(x+(y-1)*map.w)]) / 2.f;
+			float sinTheta = (sqrt(tiltX*tiltX + tiltY*tiltY)) / (sqrt(1 + tiltX*tiltX + tiltY*tiltY));
+			float vel = sqrt(map.waterVel[x+y*map.w].x*map.waterVel[x+y*map.w].x + map.waterVel[x+y*map.w].y*map.waterVel[x+y*map.w].y);
+			float Kc = 0.1f; //sediment capacity constant
+			float Ks = 0.1f; //sediment dissolving constant
+			float Kd = 0.02f; //sediment deposition constant
+
+			//sediment transport capacity
+			float C = Kc * sinTheta * vel;
+
+
+			if(C > map.susSed[x+y*map.w]){//Pickup sand
+				//Make sure the sand picked up is not more than any nearby tile, creating a pit
+				float localMin = T[x+y*map.w]+map.sand[x+y*map.w];
+				for(int i=-1;i<2;i++){
+					for(int j=-1;j<2;j++){
+						localMin = min(localMin, T[(x+j)+(y+i)*map.w]+map.sand[(x+j)+(y+i)*map.w]);
+					}
+				}
+				float pickedUp = min(Ks*(C-map.susSed[x+y*map.w]), map.sand[x+y*map.w]);
+				map.sandTemp[x+y*map.w] -= pickedUp;
+				map.susSed[x+y*map.w] += pickedUp;
+				map.water[x+y*map.w].depth += pickedUp;
+			}else if(C <= map.susSed[x+y*map.w]){//Drop sand
+				//Make sure dropped sand does not create a peak by not allowing to drop on the local highest point
+				float localMax = T[x+y*map.w]+map.sand[x+y*map.w];
+				for(int i=-1;i<2;i++){
+					for(int j=-1;j<2;j++){
+						localMax = max(localMax, T[(x+j)+(y+i)*map.w]+map.sand[(x+j)+(y+i)*map.w]);
+					}
+				}
+				if(localMax - T[x+y*map.w]+map.sand[x+y*map.w] < 0.001f) continue;
+				float dropped = Kd*(map.susSed[x+y*map.w]-C);
+				map.sandTemp[x+y*map.w] += dropped;
+				map.susSed[x+y*map.w] -= dropped;
+				map.water[x+y*map.w].depth -= dropped;
+				map.flags.updateShadowMap = 1;
+			}
+			if(map.water[x+y*map.w].depth < 0.001f){
+				float dropped = (map.susSed[x+y*map.w]);
+				map.sandTemp[x+y*map.w] += dropped;
+				map.susSed[x+y*map.w] = 0;
+				map.water[x+y*map.w].depth = 0;
+				map.flags.updateShadowMap = 1;
+			}
+
+		}
+    }
+
+    for(int y=1;y<MAPH-2;y++){
+		for(int x=1;x<MAPW-2;x++){
+			for(int i=-1;i<2;i++){
+				for(int j=-1;j<2;j++){
+					float slope = T[x+y*map.w]+map.sandTemp[x+y*map.w] - T[(x+j)+(y+i)*map.w]-map.sandTemp[(x+j)+(y+i)*map.w];
+					if(slope > 1.f){
+						float sandDiff = map.sandTemp[x+y*map.w] - map.sandTemp[(x+j)+(y+i)*map.w];
+//						if(map.water[(x+j)+(y+i)*map.w].depth < 0.1f || sandDiff > 8.f){
+							map.sandTemp[(x+j)+(y+i)*map.w] += sandDiff/4.f;
+							map.sandTemp[x+y*map.w] -= sandDiff/4.f;
+//						}
+					}
+				}
+
+			}
+		}
+	}
+    memcpy(map.sand,map.sandTemp,sizeof(map.sand));
+    memset(map.susSed2,0,sizeof(map.susSed2));
+    for(int y=1;y<MAPH-2;y++){
+		for(int x=1;x<MAPW-2;x++){
+			if(map.water[x+y*map.w].depth < 0.001f) continue;
+			//transport
+			float dX = -(map.waterVel[x+y*map.w].x*dTime);
+			float dY = (map.waterVel[x+y*map.w].y*dTime);
+			float foamTransported = 0;
+			if     (dX >= 0 && dY >= 0) foamTransported = blerp(map.susSed[(x+(int)dX)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX+1)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX)+(y+(int)dY+1)*map.w] ,map.susSed[(x+(int)dX+1)+(y+(int)dY+1)*map.w] ,(dX-(int)dX),(dY-(int)dY));
+			else if(dX >= 0 && dY <  0) foamTransported = blerp(map.susSed[(x+(int)dX)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX+1)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX)+(y+(int)dY-1)*map.w] ,map.susSed[(x+(int)dX+1)+(y+(int)dY-1)*map.w] ,(dX-(int)dX),((int)dY-dY));
+			else if(dX <  0 && dY >= 0) foamTransported = blerp(map.susSed[(x+(int)dX)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX-1)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX)+(y+(int)dY+1)*map.w] ,map.susSed[(x+(int)dX-1)+(y+(int)dY+1)*map.w] ,((int)dX-dX),(dY-(int)dY));
+			else if(dX <  0 && dY <  0) foamTransported = blerp(map.susSed[(x+(int)dX)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX-1)+(y+(int)dY)*map.w] ,map.susSed[(x+(int)dX)+(y+(int)dY-1)*map.w] ,map.susSed[(x+(int)dX-1)+(y+(int)dY-1)*map.w] ,((int)dX-dX),((int)dY-dY));
+
+			map.susSed2[(x)+(y)*map.w] += foamTransported;
+		}
+    }
+    memcpy(map.susSed,map.susSed2,sizeof(map.susSed));
+
 }
 
 
 
-Uint32 getpixel(SDL_Surface *surface, int x, int y);
 
 void loadHeightMap(const char* path){
     int w = MAPW;
@@ -296,93 +418,9 @@ vec2f_t screen2world(float x,float y, camera_t* camPtr){
 	return retVal;
 }
 
-typedef struct{
-	SDL_Texture * Texture;
-	void * mPixels;
-	uint32_t * pixels;
-	int w; 
-	int h;
-	int pitch;
-}sdlTexture;
 
 
 
-
-//gets pixel color from a png
-Uint32 getpixel(SDL_Surface *surface, int x, int y)
-{
-    int bpp = surface->format->BytesPerPixel;
-    /* Here p is the address to the pixel we want to retrieve */
-    Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
-
-    switch(bpp) {
-    case 1:
-        return *p;
-        break;
-
-    case 2:
-        return *(Uint16 *)p;
-        break;
-
-    case 3:
-        if(SDL_BYTEORDER == SDL_BIG_ENDIAN)
-            return p[0] << 16 | p[1] << 8 | p[2];
-        else
-            return p[0] | p[1] << 8 | p[2] << 16;
-        break;
-
-    case 4:
-        return *(Uint32 *)p;
-        break;
-
-    default:
-        return 0;       /* shouldn't happen, but avoids warnings */
-    }
-}
-
-uint8_t fontBitMap[8*95];
-
-void loadFont(const char* path){
-    int w = 8;
-    int h = 8;
-    int n = 95;
-    SDL_Surface* bitmap = IMG_Load(path); 
-    if(!bitmap){
-        printf("IMG_Load: %s\n", IMG_GetError());
-        return;
-    }
-    SDL_LockSurface(bitmap);
-    for(int N = 0; N < n; N++){
-        for(int y = 0; y < h; y++){
-            for(int x = 0; x < w; x++){
-                Uint8 r,g,b;
-                SDL_GetRGB(getpixel(bitmap,1+x+N*(w+1),y+1),bitmap->format,&r,&g,&b);
-                if(r == 252){ //might need adjustment depending on the font
-                    fontBitMap[y+N*h] |= (1 << x); //save each 8px row as one byte
-                }
-            }
-        }
-    }
-    SDL_UnlockSurface(bitmap);
-    SDL_FreeSurface (bitmap);
-}
-
-void print(sdlTexture* tex, char* str, int x, int y){
-    int w = 8;
-    int h = 8;
-    int n = 95;
-    for(int n=0;n<strlen(str);n++){ //iterate over each char in the string and print from fontMap
-        for(int i=0;i<h;i++){
-            for(int j=0;j<w;j++){
-                if(fontBitMap[i+(w*((int)str[n]-32))] & (1 << j)){ //fontMap starts on ! so offset by 33
-                    tex->pixels[x+j+n*(w+1)+(y+i+1)*tex->w] = 0xFFFFFFFF; //white
-                }
-            }
-        }
-    }
-}
-
-#define ROUNDF(x) ((int)(x + 0.5f))
 
 void boxBlurT_4(float *source, float *target,int w, int h, int r){
     float iarr = 1 / (float)(r+r+1);

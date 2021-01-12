@@ -16,13 +16,13 @@ uint32_t g_dtime_ms;
 
 
 uint32_t rendTexturePixels[rendererSizeX*rendererSizeY];
-uint32_t hudTexturePixels[windowSizeX*windowSizeY];
-uint32_t frameBuffer[windowSizeX*windowSizeY];
+uint32_t hudTexturePixels[hudSizeX*hudSizeY];
+uint32_t frameBuffer[rendererSizeX*rendererSizeY];
 
 sdlTexture rendTexture = {NULL,NULL,rendTexturePixels,rendererSizeX,rendererSizeY,rendererSizeX*sizeof(uint32_t)};
-sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,windowSizeX,windowSizeY,windowSizeX*sizeof(uint32_t)};
+sdlTexture hudTexture = {NULL,NULL,hudTexturePixels,hudSizeX,hudSizeY,hudSizeX*sizeof(uint32_t)};
 
-
+input_t input;
 
 float g_windowScaleX = 0.5f;
 float g_windowScaleY = 0.5f;
@@ -60,9 +60,9 @@ void generate_shadowmap(){
 				y = (diagonal - item) - 1;
 				x = map.w-item-1;
 				terrainPeakHeight -= 0.5f;
-				if(terrainPeakHeight < map.stone[x+y*map.w]){
+				if(terrainPeakHeight < map.height[x+y*map.w]){
 					map.shadow[x+y*map.w] = -30;
-					terrainPeakHeight = map.stone[x+y*map.w];
+					terrainPeakHeight = map.height[x+y*map.w];
 				}
 			}
 		} else {
@@ -71,9 +71,9 @@ void generate_shadowmap(){
 				y = (map.h - 1) - item;
 				x = diagonalLines - diagonal - item;
 				terrainPeakHeight -= 0.5f;
-				if(terrainPeakHeight < map.stone[x+y*map.w]){
+				if(terrainPeakHeight < map.height[x+y*map.w]){
 					map.shadow[x+y*map.w] = -30;
-					terrainPeakHeight = map.stone[x+y*map.w];
+					terrainPeakHeight = map.height[x+y*map.w];
 				}
 			}
 		}
@@ -87,39 +87,39 @@ void generate_shadowmap(){
 
 	for(int i=0; i<map.h; i++) {
 		int ti = i*map.w, li = ti, ri = ti+r;
-		float fv = map.stone[ti], lv = map.stone[ti+map.w-1], val = (r+1)*fv;
-		for(int j=0; j<r; j++) val += map.stone[ti+j];
+		float fv = map.height[ti], lv = map.height[ti+map.w-1], val = (r+1)*fv;
+		for(int j=0; j<r; j++) val += map.height[ti+j];
 		for(int j=0  ; j<=r ; j++) {
-			val += map.stone[ri++] - fv       ;
-			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
+			val += map.height[ri++] - fv       ;
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti-1]);
 			ti++;
 		}
-		for(int j=r+1; j<map.w-r; j++) { val += map.stone[ri++] - map.stone[li++];
-		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
+		for(int j=r+1; j<map.w-r; j++) { val += map.height[ri++] - map.height[li++];
+		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti-1]);
 		ti++;
 		}
 		for(int j=map.w-r; j<map.w  ; j++) {
-			val += lv        - map.stone[li++];
-			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti-1]);
+			val += lv        - map.height[li++];
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti-1]);
 			ti++;
 		}
 	}
 	for(int i=0; i<map.w; i++) {
 		int ti = i, li = ti, ri = ti+r*map.w;
-		float fv = map.stone[ti], lv = map.stone[ti+map.w*(map.h-1)], val = (r+1)*fv;
-		for(int j=0; j<r; j++) val += map.stone[ti+j*map.w];
-		for(int j=0  ; j<=r ; j++) { val += map.stone[ri] - fv     ;
-		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
+		float fv = map.height[ti], lv = map.height[ti+map.w*(map.h-1)], val = (r+1)*fv;
+		for(int j=0; j<r; j++) val += map.height[ti+j*map.w];
+		for(int j=0  ; j<=r ; j++) { val += map.height[ri] - fv     ;
+		map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti]);
 		ri+=map.w; ti+=map.w;
 		}
 		for(int j=r+1; j<map.h-r; j++) {
-			val += map.stone[ri] - map.stone[li];
-			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
+			val += map.height[ri] - map.height[li];
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti]);
 			li+=map.w; ri+=map.w; ti+=map.w;
 		}
 		for(int j=map.h-r; j<map.h  ; j++) {
-			val += lv      - map.stone[li];
-			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.stone[ti]);
+			val += lv      - map.height[li];
+			map.shadow[ti] += ROUNDF(val-(r+r+1)*map.height[ti]);
 			li+=map.w; ti+=map.w;
 		}
 	}
@@ -197,11 +197,14 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 		shade = min(shade, 1.f);
 		int r,g,b;
 		int posID = x + y * map.w;
-		float wtrHeight = map.water[4+x*5+y*map.w*5];
+//		float wtrHeight = map.water[4+x*5+y*map.w*5];
+		float wtrHeight = map.water[x+y*map.w].depth;
 		float camZoom = camPtr->zoom;
 		//calculate slope of water for highlighting and caustics
-		float slopX = -map.water[4+(x+1)*5 + (y)*map.w*5] + map.water[4+(x-1)*5 + (y)*map.w*5] - map.stone[(x+1) + (y)*map.w] + map.stone[(x-1) + (y)*map.w];
-		float slopY = map.water[4+(x)*5 + (y-1)*map.w*5] - map.water[4+(x)*5 + (y+1)*map.w*5] + map.stone[(x) + (y-1)*map.w] - map.stone[(x) + (y+1)*map.w];
+//		float slopX = -map.water[4+(x+1)*5 + (y)*map.w*5] + map.water[4+(x-1)*5 + (y)*map.w*5] - map.stone[(x+1) + (y)*map.w] + map.stone[(x-1) + (y)*map.w];
+		float slopX = -map.water[(x+1)+y*map.w].depth + map.water[(x-1)+y*map.w].depth - map.height[(x+1) + (y)*map.w] + map.height[(x-1) + (y)*map.w];
+//		float slopY = map.water[4+(x)*5 + (y-1)*map.w*5] - map.water[4+(x)*5 + (y+1)*map.w*5] + map.stone[(x) + (y-1)*map.w] - map.stone[(x) + (y+1)*map.w];
+		float slopY = map.water[x+(y-1)*map.w].depth - map.water[x+y*map.w].depth + map.height[(x) + (y-1)*map.w] - map.height[(x) + (y+1)*map.w];
 		if(1){//fancy water
 			int test2 = 0;
 			int underwaterFoam = 0; //use this shit
@@ -209,27 +212,32 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 				int seaFloorPosX = (x+(int)(upVec.x*i));
 				int seaFloorPosY = (y+(int)(upVec.y*i));
 //				underwaterFoam += max((int)(map.suSed[seaFloorPosX+seaFloorPosY*map.w]*200) - i*5,0) ;
-				if(map.stone[seaFloorPosX+seaFloorPosY*map.w] >= wtrHeight*2 - (float)i*1.25){
+				if(map.height[seaFloorPosX+seaFloorPosY*map.w] >= wtrHeight*2 - (float)i*1.25){
 					test2 = (x+(int)(upVec.x*i))+(y+(int)(upVec.y*i))*map.w;
 					int newX = (x+(int)(upVec.x*i));
 					int newY = (y+(int)(upVec.y*i));
 					float caustic = 0;
 					if(!(seaFloorPosX <= 2 || seaFloorPosX >= map.w-2 || seaFloorPosY <= 2 || seaFloorPosY >= map.h-2)){
-						caustic =  (map.water[4+(newX+1)*5+newY*map.w*5] - map.water[4+(newX-1)*5+newY*map.w*5] + map.stone[test2+1] - map.stone[test2-1] +
-							map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;
+//						caustic =  (map.water[4+(newX+1)*5+newY*map.w*5] - map.water[4+(newX-1)*5+newY*map.w*5] + map.stone[test2+1] - map.stone[test2-1] +
+						caustic =  (map.water[(newX+1)+newY*map.w].depth - map.water[(newX-1)+newY*map.w].depth + map.height[test2+1] - map.height[test2-1] +
+//							map.water[4+(newX)*5+(newY+1)*map.w*5] - map.water[4+(newX)*5+(newY-1)*map.w*5] + map.stone[test2+1*map.w] - map.stone[test2-1*map.w])*10;
+							map.water[(newX)+(newY+1)*map.w].depth - map.water[(newX)+(newY-1)*map.w].depth + map.height[test2+1*map.w] - map.height[test2-1*map.w])*10;
 					}
 					float foamShadow = 0;//map.foamLevel[test2] * 0.2;
 					underwaterFoam = max(min(underwaterFoam,100),0);
-					r =	map.argb[test2].r ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
-					g =	map.argb[test2].g ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
-					b =	map.argb[test2].b ;//+ (-caustic - foamShadow + underwaterFoam)*(1-min(shade,1.0f));
+					r =	min(map.argb[posID].r + map.sand[posID]*202.f*0.5f,202.f);   //map.argb[test2].r ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
+					g =	min(map.argb[posID].r + map.sand[posID]*188.f*0.5f,188.f);   //map.argb[test2].g ;//+ (-caustic - foamShadow + underwaterFoam*0.5f)*(1-min(shade,1.0f));
+					b =	min(map.argb[posID].r + map.sand[posID]*145.f*0.5f,145.f);   //map.argb[test2].b ;//+ (-caustic - foamShadow + underwaterFoam)*(1-min(shade,1.0f));
 					
 					//lerp between hard and soft shadows depending on the depth
 					int shadow;
-					if(map.water[4+(newX)*5+(newY)*map.w*5] < 10){ //interpolate between hard and soft shadows
-						shadow = map.shadow[test2] + (map.shadowSoft[test2] - map.shadow[test2])*(min(map.water[4+(newX)*5+(newY)*map.w*5]/10.f,1.f));
+//					if(map.water[4+(newX)*5+(newY)*map.w*5] < 10){ //interpolate between hard and soft shadows
+					if(map.water[(newX)+(newY)*map.w].depth < 10){ //interpolate between hard and soft shadows
+//						shadow = map.shadow[test2] + (map.shadowSoft[test2] - map.shadow[test2])*(min(map.water[4+(newX)*5+(newY)*map.w*5]/10.f,1.f));
+						shadow = map.shadow[test2] + (map.shadowSoft[test2] - map.shadow[test2])*(min(map.water[(newX)+(newY)*map.w].depth/10.f,1.f));
 					}else{//interpolate between soft and no shadows
-						shadow = map.shadowSoft[test2] + (0 - map.shadowSoft[test2])*(min(map.water[4+(newX)*5+(newY)*map.w*5]/100.f,1.f));
+//						shadow = map.shadowSoft[test2] + (0 - map.shadowSoft[test2])*(min(map.water[4+(newX)*5+(newY)*map.w*5]/100.f,1.f));
+						shadow = map.shadowSoft[test2] + (0 - map.shadowSoft[test2])*(min(map.water[(newX)+(newY)*map.w].depth/100.f,1.f));
 					}
 					r -= 0;//shadow;
 					g -= 0;//shadow;
@@ -252,8 +260,10 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 			if(seaFloorPosX > 2 && seaFloorPosX < map.w-2 && seaFloorPosY > 2 && seaFloorPosY < map.h-2){
 				int seaFloorPos = seaFloorPosX+seaFloorPosY*map.w;
 //				foamShadow = map.foamLevel[seaFloorPos] * 0.1;
-				caustic =  (map.water[4+(seaFloorPosX+1)*5+(seaFloorPosY)*map.w*5] - map.water[4+(seaFloorPosX-1)*5+(seaFloorPosY)*map.w*5] + map.stone[seaFloorPos+1] - map.stone[seaFloorPos-1] +
-										map.water[4+(seaFloorPosX)*5+(seaFloorPosY+1)*map.w*5] - map.water[4+(seaFloorPosX)*5+(seaFloorPosY-1)*map.w*5] + map.stone[seaFloorPos+1*map.w] - map.stone[seaFloorPos-1*map.w])*10;	
+//				caustic =  (map.water[4+(seaFloorPosX+1)*5+(seaFloorPosY)*map.w*5] - map.water[4+(seaFloorPosX-1)*5+(seaFloorPosY)*map.w*5] + map.stone[seaFloorPos+1] - map.stone[seaFloorPos-1] +
+				caustic =  (map.water[(seaFloorPosX+1)+(seaFloorPosY)*map.w].depth - map.water[(seaFloorPosX-1)+(seaFloorPosY)*map.w].depth + map.height[seaFloorPos+1] - map.height[seaFloorPos-1] +
+//										map.water[4+(seaFloorPosX)*5+(seaFloorPosY+1)*map.w*5] - map.water[4+(seaFloorPosX)*5+(seaFloorPosY-1)*map.w*5] + map.stone[seaFloorPos+1*map.w] - map.stone[seaFloorPos-1*map.w])*10;
+										map.water[(seaFloorPosX)+(seaFloorPosY+1)*map.w].depth - map.water[(seaFloorPosX)+(seaFloorPosY-1)*map.w].depth + map.height[seaFloorPos+1*map.w] - map.height[seaFloorPos-1*map.w])*10;
 			}
 //			r =	map.argb[posID].r + (caustic - foamShadow)*(1-shade);
 //			g =	map.argb[posID].g + (caustic - foamShadow)*(1-shade);
@@ -306,7 +316,11 @@ argb_t getTileColorWater(int x, int y, int ys, vec2f_t upVec, float shade, camer
 		g += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f))*1;
 		b += map.foamLevel[x + y*map.w]*(1-min(shade,1.0f))*1;
 	}
-	
+	if(map.susSed[x + y*map.w] > 0){
+		r +=  map.susSed[x+y*map.w]*202.f/4.f;
+		g +=  map.susSed[x+y*map.w]*188.f/4.f;
+		b +=  map.susSed[x+y*map.w]*145.f/2.f;
+	}
 	//apply shadow on water
 	float shadow = map.shadow[x+y*map.w]*(1-min(shade,1.0f));
 	r -= shadow;
@@ -451,8 +465,8 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 			int posID = xwti + ywti*map.w;
 
 
-			float gndHeight = map.stone[posID];
-			float wtrHeight = map.water[4+xwti*5+ywti*map.w*5];
+			float gndHeight = map.stone[posID] + map.sand[posID]; //not using map.height ensures instant terrain update, map.height is okay for blurry/unclear renderings as underwater
+			float wtrHeight = map.water[xwti+ywti*map.w].depth;
 			float mistHeight = 0;//Map.mistHeight[posID];
 			float lavaHeight = 0;//Map.lavaHeight[posID];
 
@@ -480,24 +494,22 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 			//	b = lavaRGB.b;
 
 			}else{ //only ground
-				r =	map.argb[posID].r;
-				g =	map.argb[posID].g;
-				b =	map.argb[posID].b;
+//				xwt + ywt*map.w;  	202, 188, 145
+				r =	min(map.argb[posID].r + map.sand[posID]*202.f*0.5f,202.f); //map.argb[posID].r;
+				g =	min(map.argb[posID].r + map.sand[posID]*188.f*0.5f,188.f); //map.argb[posID].g;
+				b =	min(map.argb[posID].r + map.sand[posID]*145.f*0.5f,145.f); //map.argb[posID].b;
 				r -= map.shadow[posID];
 				g -= map.shadow[posID];
 				b -= map.shadow[posID];
 				if(      map.foamLevel[xwti + ywti*map.w] > 0){
-//					r += map.foamLevel[xwti + ywti*map.w];
-//					g += map.foamLevel[xwti + ywti*map.w];
-//					b += map.foamLevel[xwti + ywti*map.w];
+					r += map.foamLevel[xwti + ywti*map.w];
+					g += map.foamLevel[xwti + ywti*map.w];
+					b += map.foamLevel[xwti + ywti*map.w];
 				}
 
+
+
 			}
-//			if(      map.foamLevel[xwti + ywti*map.w] > 0){
-//					r += 255;
-//					g += 255;
-//					b += 255;
-//				}
 
 			//calculate and draw cursor
 			if((xwti-cursor.worldX)*(xwti-cursor.worldX) + (ywti-cursor.worldY)*(ywti-cursor.worldY) <= cursor.radius*cursor.radius){
@@ -565,7 +577,7 @@ void renderColumn(int x, int yBot, int yTop, vec2f_t mapCornerBot, vec2f_t upVec
 			dPixels = 1;
 		}
 }else{
-	dPixels = 10;
+	dPixels = 1;
 	xwt += dDxw * dPixels;
 	ywt += dDyw * dPixels;
 }
@@ -704,21 +716,25 @@ void render(){
 void renderHud(){
 	for(int y=0;y<hudTexture.h;y++){
 		for(int x=0;x<hudTexture.w;x++){
-			if(x < MAPW && y < MAPH){
-				//argb_t argb = {map.argb[x+y*MAPW].b, map.argb[x+y*MAPW].r, map.argb[x+y*MAPW].g, 255};
 
-				//hudTexture.pixels[x + y*hudTexture.w] = *(uint32_t*)&argb;	
-			}
+			//argb_t argb = {map.argb[x+y*MAPW].b, map.argb[x+y*MAPW].r, map.argb[x+y*MAPW].g, 255};
+
+			hudTexture.pixels[x + y*hudTexture.w] = (100 << 8) | (150);
+
 
 		}
 	}
 
+	drawGUI(&hudTexture);
 	
 }
 
 
 const Uint8 *keyboardState; // get pointer to key states 
 
+void testf(void){
+	printf("test\n");
+}
 
 void init(){
 	
@@ -728,18 +744,20 @@ void init(){
 	map.h = MAPH;
 	map.tileWidth = 1.f;
 
-	g_cam.x = 150;
-	g_cam.y = -200;
+	//init camera position, the following will init camera to center overview a 256x256 map
+	//camera: x:336.321991 y:-93.287224 rot:1.570000 zoom:0.609125camera: x:327.101379 y:-84.052345 rot:1.570000 zoom:0.609125
+	g_cam.x = 336.321991;
+	g_cam.y = -93.287224;
 	g_cam.rot = 3.14f/2;
-	g_cam.zoom = 0.3;
+	g_cam.zoom = 0.609125;
 
 	cursor.amount = 0.3;
-	cursor.radius = 5;
+	cursor.radius = 8;
 
 	loadFont("assets/VictoriaBold.png"); //load font lol
 
-	loadHeightMap("assets/mountain_height.png");
-	loadColorMap("assets/mountain_color.png");
+//	loadHeightMap("assets/mountain_height.png");
+//	loadColorMap("assets/mountain_color.png");
 
 	map.flags.updateShadowMap = 1; //make sure shadows are updated after map load
 
@@ -747,35 +765,81 @@ void init(){
 	memset(&foam,0,sizeof(foam));
 	foam.size = FOAMSIZE;
 
+    for(int y=1;y<MAPH-1;y++){
+        for(int x=1;x<MAPW-1;x++){
+        	map.stone[x+y*map.w] = 20.f + (float)x/10.f;
+        	map.sand[x+y*map.w] = 0.f;
 
+        	map.argb[x+y*map.w].r = 80;
+        	map.argb[x+y*map.w].g = 80;
+        	map.argb[x+y*map.w].b = 80;
+
+//        	if(x%20<10&&y%20<10)map.foamLevel[x+y*map.w] = 50.f;
+        }
+    }
+
+    //create GUI
+    createWidget(PRESSBUTTON, 10, 10, 180, 100, "Water", &testf);
 
 }
 
 
 void updateInput(){
 	//update pos and state of mouse
-	input.mouse.state = SDL_GetMouseState(&input.mouse.x,&input.mouse.y);
+	uint32_t SDL_mouseState;
+	SDL_mouseState = SDL_GetMouseState(&input.mouse.x,&input.mouse.y);
+
+	static int leftTrigger = 0;
+	if(SDL_mouseState == SDL_BUTTON_LEFT){
+		if(leftTrigger == 0){
+			input.mouse.left = KEY_PRESSED;
+			leftTrigger = 1;
+		}else{
+			input.mouse.left = KEY_HELD;
+		}
+
+	}else if(leftTrigger == 1){
+		input.mouse.left = KEY_RELEASED;
+		leftTrigger = 0;
+	}
+	static int rightTrigger = 0;
+	if(SDL_mouseState == 4){
+		if(rightTrigger == 0){
+			input.mouse.right = KEY_PRESSED;
+			rightTrigger = 1;
+		}else{
+			input.mouse.right = KEY_HELD;
+		}
+
+	}else if(rightTrigger == 1){
+		input.mouse.right = KEY_RELEASED;
+		rightTrigger = 0;
+	}
+
 	//update mouse world pos
 	float percentX = ((float)input.mouse.x / (float)windowSizeX);
 	float pixelsX = percentX * (float)g_canvasSizeX;
 
 	float ratioX =  (float)windowSizeX / (float)g_canvasSizeX;
 	float ratioY = (float)g_canvasSizeY / (float)windowSizeY;
-
+	float test = get_browser_height();
 	cursor.screenX = (float)input.mouse.x * (float)g_windowScaleX;
 	cursor.screenY = (float)input.mouse.y * (float)g_windowScaleY;
 	vec2f_t pos = screen2world(cursor.screenX, cursor.screenY, &g_cam);
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
 
-	switch(input.mouse.state){
+	handleGUI(cursor.screenX - 600 , cursor.screenY, &input);
+
+	switch(SDL_mouseState){
 	case SDL_BUTTON_LEFT:
 	{
 		float radius = cursor.radius;
 		for(int j=-radius;j<=radius;j++){
 			for(int k=-radius;k<=radius;k++){
 				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){	
-					map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+//					map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+					map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 //					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 				}
 			}
@@ -785,11 +849,13 @@ void updateInput(){
 	case 4: //RIGHT
 	{
 		float radius = cursor.radius;
-		for(int j=-radius;j<=radius;j++){
-			for(int k=-radius;k<=radius;k++){
+		for(int j=-radius*2;j<=radius*2;j++){
+			for(int k=-radius*2;k<=radius*2;k++){
 				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){
 //							map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+//					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+					map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+//					map.foamLevel[cursor.worldX+k+(cursor.worldY+j)*map.w] += 1;
 				}
 			}
 		}
@@ -817,6 +883,8 @@ void updateInput(){
 			g_cam.x -= sin(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
 			g_cam.y += cos(g_cam.rot-3.1415/4)*450 *g_dtime_ms / 1000;
 
+			//Print camera pos
+			printf("camera: x:%f y:%f rot:%f zoom:%f", g_cam.x, g_cam.y, g_cam.rot, g_cam.zoom);
 	}
 	if(keyboardState[SDL_SCANCODE_S]){
 
@@ -876,92 +944,76 @@ void updateInput(){
 
 void process(){
 
-	update_fluid_velocity();
+
+//	update_fluid_velocity();
 
 	//foam
 	//spawn foam where water is turbulent
 	for(int y=1;y<map.h-1;y++){
 		for(int x=1;x<map.w-1;x++){
 
-			float velX = map.waterVel[0+x*2+y*map.w*2];
-			float velY = map.waterVel[1+x*2+y*map.w*2];
+			float velX = map.waterVel[x+y*map.w].x;
+			float velY = map.waterVel[x+y*map.w].y;
 			//curl is something, velDiff is speed difference with nearby tiles
-			float curl = map.waterVel[1+(x+1)*2+y*map.w*2] - map.waterVel[1+(x-1)*2+y*map.w*2] - map.waterVel[0+x*2+(y+1)*map.w*2] + map.waterVel[1+x*2+(y-1)*map.w*2];
-			float velDiff = velX*2 - map.waterVel[0+(x-1)*2+(y)*map.w*2] - map.waterVel[0+(x+1)*2+(y)*map.w*2] + velY*2 - map.waterVel[1+x*2+(y-1)*map.w*2] - map.waterVel[1+x*2+(y+1)*map.w*2];
-			if((fabsf(velDiff) > 10 || fabsf(curl) > 5)){
-				foam.amount[foam.counter%foam.size] = 2;
-				foam.on[foam.counter%foam.size] = 1;
-				foam.posX[foam.counter%foam.size] = x;
-				foam.posY[foam.counter%foam.size] = y;
-				foam.velX[foam.counter%foam.size] = velX;
-				foam.velY[foam.counter%foam.size] = velY;
+			float curl = map.waterVel[(x+1)+y*map.w].y - map.waterVel[(x-1)+y*map.w].y - map.waterVel[x+(y+1)*map.w].x + map.waterVel[x+(y-1)*map.w].y;
+			float velDiff = velX*2 - map.waterVel[(x-1)+(y)*map.w].x - map.waterVel[(x+1)+(y)*map.w].x + velY*2 - map.waterVel[x+(y-1)*map.w].y - map.waterVel[x+(y+1)*map.w].y;
+			float deltaV = (map.water[(x-1)+(y)*MAPW].right+map.water[(x)+(y+1)*MAPW].down+map.water[(x+1)+(y)*MAPW].left+map.water[(x)+(y-1)*MAPW].up - (map.water[(x)+(y)*MAPW].right+map.water[(x)+(y)*MAPW].down+map.water[(x)+(y)*MAPW].left+map.water[(x)+(y)*MAPW].up));
+
+			if(deltaV > 0.5f){//(fabsf(velDiff) > 10 || fabsf(curl) > 5)){
+				foam.status[foam.counter%foam.size].amount = 2;
+				foam.status[foam.counter%foam.size].on = 1;
+				foam.pos[foam.counter%foam.size].x = x;
+				foam.pos[foam.counter%foam.size].y = y;
+//				foam.vel[foam.counter%foam.size].x = velX;
+//				foam.vel[foam.counter%foam.size].y = velY;
 				foam.counter ++;
+//				map.foamLevel[x+y*map.h] += 2;
 			}
 
 		}
 	}
 
 
-	//update velocity
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			foam.velX[i] = map.waterVel[0+(int)foam.posX[i]*2+(int)foam.posY[i]*map.w*2]*0.1;
-		}
-	}
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			foam.velY[i] = map.waterVel[1+(int)foam.posX[i]*2+(int)foam.posY[i]*map.w*2]*0.1;
-		}
-	}
-
-
-
-	//update position
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			foam.posX[i] += foam.velX[i];
-		}
-
-	}
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			foam.posY[i] -= foam.velY[i];
-		}
-	}
-
-	//remove foam on land or lavafoam outside lava
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			int x = foam.posX[i];
-			int y = foam.posY[i];
-			if(x <= 1 || x >= map.w-1 || y <= 1 || y >= map.h-1 /*|| (H[0+x*4+y*map.w*4] <= 0)*/){
-				foam.on[i] = 0;
-			}
-		}
-	}
 
 	//clear foamlevels and update with new levels
 
-	memset(map.foamLevel, 0 , sizeof(*map.foamLevel)*map.w*map.h);
-
-
-	for(int i=0;i<foam.size;i++){
-		if(foam.on[i]){
-			int x = foam.posX[i];
-			int y = foam.posY[i];
-			if(map.foamLevel[x+y*map.w] < 155) map.foamLevel[x+y*map.w] += foam.amount[i];
-			else foam.on[i] = 0;
-		}
-	}
+//	memset(map.foamLevel, 0 , sizeof(*map.foamLevel)*map.w*map.h);
+//
+//
+//	for(int i=0;i<foam.size;i++){
+//		if(foam.status[i].on){
+//			foam.pos[i].x += map.waterVel[ROUNDF(foam.pos[i].x)+ROUNDF(foam.pos[i].y)*map.w].x*0.1;
+//			foam.pos[i].y -= map.waterVel[ROUNDF(foam.pos[i].x)+ROUNDF(foam.pos[i].y)*map.w].y*0.1;
+//			int x = ROUNDF(foam.pos[i].x);
+//			int y = ROUNDF(foam.pos[i].y);
+//			if(map.foamLevel[x+y*map.w] > 128)  foam.status[i].on = 0;
+//			else map.foamLevel[x+y*map.w] += 2;//foam.amount[i];
+//
+//		}
+//	}
 
 
 #if (ENABLE_MULTITHREADING == 0)
-	water_update(map.water, 9.81f, 1.f, 1.f, 1.0f, 0.15f);
+	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, /*min(0.001f*g_dtime_ms, 0.15f)*/0.15f);
 #endif
 
 	static int timer_100ms = 0;
-	if(g_time_ms - timer_100ms > 100){
+	if(g_time_ms - timer_100ms > 100 || map.flags.updateShadowMap){
 		timer_100ms = g_time_ms;
+
+		for(int i=0;i<map.w*map.h;i++){
+			map.height[i] = map.stone[i]+map.sand[i];
+		}
+
+//	float totStone = 0;
+//	float totSus = 0;
+//	for(int y=0;y<map.h-0;y++){
+//		for(int x=0;x<map.w-0;x++){
+//			totStone += map.stone[x+y*map.w];
+//			totSus += map.susSed[x+y*map.w];
+//		}
+//	}
+//	printf("stone: %f sed: %f tot: %f\n",totStone,totSus,totStone+totSus);
 
 		if(map.flags.updateShadowMap) generate_shadowmap();
 	}
@@ -991,26 +1043,26 @@ void loop(){
 
 	if(threadDone == 1 || ENABLE_MULTITHREADING == 0){
 
-	memcpy(rendTexture.pixels,frameBuffer,sizeof(frameBuffer));
-//	for(int y=0;y<rendererSizeY;y++){
-//		for(int x=0;x<rendererSizeX;x++){
-//			rendTexture.pixels[x+y*rendererSizeX] = frameBuffer[x+y*rendererSizeX];
-//		}
-//	}
-	//calculate and print fps
-	static uint32_t frameCount = 0;
-	frameCount++;
-	static uint32_t timer_1000ms = 0;
-	static int fps;
-	if(g_time_ms - timer_1000ms > 1000){
-		timer_1000ms = g_time_ms;
-		fps = frameCount;
-		frameCount = 0;
-	}
+		memcpy(rendTexture.pixels,frameBuffer,sizeof(frameBuffer));
+	//	for(int y=0;y<rendererSizeY;y++){
+	//		for(int x=0;x<rendererSizeX;x++){
+	//			rendTexture.pixels[x+y*rendererSizeX] = frameBuffer[x+y*rendererSizeX];
+	//		}
+	//	}
+		//calculate and print fps
+		static uint32_t frameCount = 0;
+		frameCount++;
+		static uint32_t timer_1000ms = 0;
+		static int fps;
+		if(g_time_ms - timer_1000ms > 1000){
+			timer_1000ms = g_time_ms;
+			fps = frameCount;
+			frameCount = 0;
+		}
 
-	char fpsStr[20];
-	sprintf(fpsStr,"FPS: %d",fps);
-	print(&rendTexture,fpsStr,10,10);
+		char fpsStr[20];
+		sprintf(fpsStr,"FPS: %d",fps);
+		print(&rendTexture,fpsStr,10,10);
 
 	threadDone = 0;
 	}
@@ -1022,10 +1074,21 @@ void loop(){
 	renderHud();
 	SDL_UnlockTexture(hudTexture.Texture);
 
+	SDL_Rect hudRect;
+	hudRect.x = 600;
+	hudRect.y = 0;
+	hudRect.w = 200;
+	hudRect.h = 600;
+
+	SDL_Rect renderRect;
+	renderRect.x = 0;
+	renderRect.y = 0;
+	renderRect.w = 600;
+	renderRect.h = 600;
 
 
-	SDL_RenderCopy(renderer,rendTexture.Texture,NULL,NULL); //copy screen texture to renderer
-	SDL_RenderCopy(renderer,hudTexture.Texture,NULL,NULL); //copy hud texture to renderer
+	SDL_RenderCopy(renderer,rendTexture.Texture,NULL,&renderRect); //copy screen texture to renderer
+	SDL_RenderCopy(renderer,hudTexture.Texture,NULL,&hudRect); //copy hud texture to renderer
 
 	// Render the changes above
 	SDL_RenderPresent( renderer);
@@ -1035,13 +1098,6 @@ void loop(){
 }
 void main_loop() { loop(); }
 
-EM_JS(int, get_browser_width, (), {
-  return window.innerWidth;
-});
-
-EM_JS(int, get_browser_height, (), {
-  return window.innerHeight;
-});
 
 
 EM_BOOL resize_callback(int eventType, const EmscriptenUiEvent* uiEvent, void *userData)
@@ -1054,21 +1110,23 @@ EM_BOOL resize_callback(int eventType, const EmscriptenUiEvent* uiEvent, void *u
 
 	int newWidth,newHeight;
 	if(browserWidth > browserHeight){
-		newWidth = browserHeight;
+		g_windowScaleY = (float)windowSizeY / (float)browserHeight;
 		newHeight = browserHeight;
+		newWidth = windowSizeX / g_windowScaleY;
+		g_windowScaleX = (float)windowSizeX / (float)newWidth;
 	}else{
+		g_windowScaleX = (float)windowSizeX / (float)newWidth;
 		newWidth = browserWidth;
-		newHeight = browserWidth;
+		newHeight = windowSizeY / g_windowScaleX;
+		g_windowScaleY = (float)windowSizeY / (float)browserHeight;
 	}
 
 	SDL_SetWindowSize(window, newWidth, newHeight);
-	g_windowScaleX = (float)windowSizeX / (float)newWidth;
-	g_windowScaleY = (float)windowSizeY / (float)newHeight;
 
 
-	printf("Window resized: %dx%d\n", (int)browserWidth, (int)browserHeight);
+	printf("Window resized: browser %dx%d, viewport %dx%d\n", (int)browserWidth, (int)browserHeight, newWidth, newHeight);
 
-
+printf("%f\n",g_windowScaleY);
 
 	return 1;
 }
@@ -1177,7 +1235,7 @@ int main()
 	rendTexture.Texture = SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, rendTexture.w, rendTexture.h);
 	//init hudTexture as transparent
 	hudTexture.Texture = SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, hudTexture.w, hudTexture.h);
-	SDL_SetTextureBlendMode(hudTexture.Texture,SDL_BLENDMODE_BLEND);
+//	SDL_SetTextureBlendMode(hudTexture.Texture,SDL_BLENDMODE_BLEND);
 
 
 	if (IS_FULLSCREEN){
@@ -1199,16 +1257,22 @@ int main()
 
 	int newWidth,newHeight;
 	if(browserWidth > browserHeight){
-		newWidth = browserHeight;
+		g_windowScaleY = (float)windowSizeY / (float)browserHeight;
 		newHeight = browserHeight;
+		newWidth = windowSizeX / g_windowScaleY;
+		g_windowScaleX = (float)windowSizeX / (float)newWidth;
 	}else{
+		g_windowScaleX = (float)windowSizeX / (float)newWidth;
 		newWidth = browserWidth;
-		newHeight = browserWidth;
+		newHeight = windowSizeY / g_windowScaleX;
+		g_windowScaleY = (float)windowSizeY / (float)browserHeight;
 	}
 
 	SDL_SetWindowSize(window, newWidth, newHeight);
-	g_windowScaleX = (float)windowSizeX / (float)newWidth;
-	g_windowScaleY = (float)windowSizeY / (float)newHeight;
+
+
+	printf("Window sized: browser %dx%d, viewport %dx%d\n", (int)browserWidth, (int)browserHeight, newWidth, newHeight);
+
 
 	emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, mouse_callback);
 	emscripten_set_resize_callback(NULL, NULL, 0, resize_callback);
