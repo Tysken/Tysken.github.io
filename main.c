@@ -725,15 +725,23 @@ void renderHud(){
 		}
 	}
 
-	drawGUI(&hudTexture);
+	gui_drawGUI(&hudTexture);
 	
 }
 
 
 const Uint8 *keyboardState; // get pointer to key states 
 
-void testf(void){
-	printf("test\n");
+void toolSelectWater(void){
+	cursor.tool = TOOL_WATER;
+}
+
+void toolSelectSand(void){
+	cursor.tool = TOOL_SAND;
+}
+
+void toolSelectStone(void){
+	cursor.tool = TOOL_STONE;
 }
 
 void init(){
@@ -779,7 +787,9 @@ void init(){
     }
 
     //create GUI
-    createWidget(PRESSBUTTON, 10, 10, 180, 100, "Water", &testf);
+    gui_createPressButton("Water", 20, 20, 160, 50, &toolSelectWater);
+    gui_createPressButton("Sand",  20, 90, 160, 50, &toolSelectSand);
+    gui_createPressButton( "Stone",20, 160, 160, 50, &toolSelectStone);
 
 }
 
@@ -829,7 +839,7 @@ void updateInput(){
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
 
-	handleGUI(cursor.screenX - 600 , cursor.screenY, &input);
+	gui_handleGUI(cursor.screenX - 600 , cursor.screenY, &input);
 
 	switch(SDL_mouseState){
 	case SDL_BUTTON_LEFT:
@@ -839,7 +849,17 @@ void updateInput(){
 			for(int k=-radius;k<=radius;k++){
 				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){	
 //					map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-					map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+					switch(cursor.tool){
+					case TOOL_WATER:
+						map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						break;
+					case TOOL_SAND:
+						map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						break;
+					case TOOL_STONE:
+						map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						break;
+					}
 //					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 				}
 			}
@@ -852,10 +872,17 @@ void updateInput(){
 		for(int j=-radius*2;j<=radius*2;j++){
 			for(int k=-radius*2;k<=radius*2;k++){
 				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){
-//							map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-//					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-					map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-//					map.foamLevel[cursor.worldX+k+(cursor.worldY+j)*map.w] += 1;
+					switch(cursor.tool){
+					case TOOL_WATER:
+						map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth = max(map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth -  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms, 0.f);
+						break;
+					case TOOL_SAND:
+						map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w]          = max(map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] - cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms, 0.f);
+						break;
+					case TOOL_STONE:
+						map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w]         = max(map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] - cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms, 5.f);
+						break;
+					}
 				}
 			}
 		}

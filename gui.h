@@ -10,6 +10,8 @@
 
 #include "draw.h"
 
+#define MAX_NO_WIDGETS 32
+
 enum keyState{
 	KEY_PRESSED,
 	KEY_HELD,
@@ -72,8 +74,25 @@ typedef struct{
 	void (*callbackFunction)(void);
 }pressButton_t;
 
+typedef struct{
+	int x,y,w,h;
+	argb_t emptyColor;
+	argb_t fillColor;
+	argb_t grabColor;
+	enum{
+		SLIDER_TYPE_FLOAT,
+		SLIDER_TYPE_INT
+	}type;
+	int maxi, mini, defaulti;
+	float maxf, minf, defaultf;
+	float* linkedFloat;
+	int* linkedInt;
+	char text[20];
+}slider_t;
+
 typedef enum{
 	PRESSBUTTON,
+	SLIDER,
 	OTHER
 }widgetType;
 
@@ -82,49 +101,53 @@ typedef struct{
 	void* widgetPtr;
 }widget_t;
 
-#define MAX_NO_WIDGETS 32
-widget_t widgetList[MAX_NO_WIDGETS];
 
-void createWidget(widgetType type, int x, int y, int w, int h, char* text, void (*callback)(void)){
-	static int nWidgets = 0;
+struct{
+	uint32_t nWidgets;
+	widget_t widgetList[MAX_NO_WIDGETS];
+}gui;
 
-	switch(type){
-	case PRESSBUTTON:
-	{
-		pressButton_t* wPtr = (pressButton_t*)malloc(sizeof(pressButton_t));
-		wPtr->callbackFunction = callback;
-		wPtr->x = x;
-		wPtr->y = y;
-		wPtr->w = w;
-		wPtr->h = h;
+
+void gui_createPressButton(char* text, int x, int y, int w, int h, void (*callback)(void)){
+
+	pressButton_t* wPtr = (pressButton_t*)malloc(sizeof(pressButton_t));
+	wPtr->callbackFunction = callback;
+	wPtr->x = x;
+	wPtr->y = y;
+	wPtr->w = w;
+	wPtr->h = h;
+	if(gui.nWidgets == 0){
 		wPtr->colorFirst  = ARGB_BLUE;
 		wPtr->colorSecond = ARGB_BLUE_LIGHT;
-		wPtr->color = colorScheme[wPtr->colorFirst];
-		wPtr->state = PRESSBUTTON_IDLE;
-		//copy text
-		for(int i=0;i<20;i++){
-			wPtr->text[i] = text[i];
-		}
-		widgetList[nWidgets].widgetPtr = wPtr;
-		widgetList[nWidgets].type = PRESSBUTTON;
-
-
-		nWidgets++;
-	}	break;
-	default:
-
-		break;
+	}else if(gui.nWidgets == 1){
+		wPtr->colorFirst  = ARGB_GREEN;
+		wPtr->colorSecond = ARGB_GREEN_LIGHT;
+	}else{
+		wPtr->colorFirst  = ARGB_RED;
+		wPtr->colorSecond = ARGB_RED_LIGHT;
 	}
+	wPtr->color = colorScheme[wPtr->colorFirst];
+	wPtr->state = PRESSBUTTON_IDLE;
+	//copy text
+	for(int i=0;i<20;i++){
+		wPtr->text[i] = text[i];
+	}
+	gui.widgetList[gui.nWidgets].widgetPtr = wPtr;
+	gui.widgetList[gui.nWidgets].type = PRESSBUTTON;
+
+
+	gui.nWidgets++;
+
 }
 
-void handleGUI(int mouseX, int mouseY, input_t* inputPtr){
+void gui_handleGUI(int mouseX, int mouseY, input_t* inputPtr){
 //	printf("%d %d \n",mouseX,mouseY);
 	for(int i=0;i<MAX_NO_WIDGETS;i++){
-		if(widgetList[i].widgetPtr != NULL){
-			switch(widgetList[i].type){
+		if(gui.widgetList[i].widgetPtr != NULL){
+			switch(gui.widgetList[i].type){
 			case PRESSBUTTON:
 			{
-				pressButton_t* buttonPtr = ((pressButton_t*)(widgetList[i].widgetPtr));
+				pressButton_t* buttonPtr = ((pressButton_t*)(gui.widgetList[i].widgetPtr));
 				int x = buttonPtr->x;
 				int y = buttonPtr->y;
 				int w = buttonPtr->w;
@@ -135,13 +158,17 @@ void handleGUI(int mouseX, int mouseY, input_t* inputPtr){
 					buttonPtr->color = colorScheme[buttonPtr->colorFirst];
 					if(inputPtr->mouse.left == KEY_HELD){
 						buttonPtr->state = PRESSBUTTON_PRESSED;
-						buttonPtr->color = colorScheme[ buttonPtr->colorSecond];
+						buttonPtr->color = colorScheme[buttonPtr->colorSecond];
 					}else if(inputPtr->mouse.left == KEY_RELEASED){
 						buttonPtr->state = PRESSBUTTON_RELEASED;
+						buttonPtr->color = colorScheme[buttonPtr->colorFirst];
 						buttonPtr->callbackFunction(); //run linked callback function
 					}
 				}else if(buttonPtr->state == PRESSBUTTON_HOVER){
 					buttonPtr->state = PRESSBUTTON_IDLE;
+					buttonPtr->color = colorScheme[buttonPtr->colorFirst];
+				}else{
+					buttonPtr->color = colorScheme[buttonPtr->colorFirst];
 				}
 			}	break;
 			default:
@@ -152,13 +179,13 @@ void handleGUI(int mouseX, int mouseY, input_t* inputPtr){
 	}
 }
 
-void drawGUI(sdlTexture* texturePtr){
+void gui_drawGUI(sdlTexture* texturePtr){
 	for(int i=0;i<MAX_NO_WIDGETS;i++){
-			if(widgetList[i].widgetPtr != NULL){
-				switch(widgetList[i].type){
+			if(gui.widgetList[i].widgetPtr != NULL){
+				switch(gui.widgetList[i].type){
 				case PRESSBUTTON:
 				{
-					pressButton_t* buttonPtr = ((pressButton_t*)(widgetList[i].widgetPtr));
+					pressButton_t* buttonPtr = ((pressButton_t*)(gui.widgetList[i].widgetPtr));
 					int bx = buttonPtr->x;
 					int by = buttonPtr->y;
 					int bw = buttonPtr->w;
@@ -170,7 +197,7 @@ void drawGUI(sdlTexture* texturePtr){
 						}
 					}
 					int txtLength = strlen(buttonPtr->text);
-					print(texturePtr, buttonPtr->text, bx+bw/2-(txtLength/2)*8, bh/2-4+by);
+					print(texturePtr, buttonPtr->text, bx+bw/2-(txtLength*8/2), bh/2-4+by);
 
 				}	break;
 				default:

@@ -81,6 +81,11 @@ struct{
     int screenY;
     int worldX;
     int worldY;
+    enum{
+    	TOOL_WATER = 1,
+		TOOL_SAND  = 2,
+		TOOL_STONE = 3
+    }tool;
     float radius;
     float amount;
 }cursor;
