@@ -18,15 +18,6 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengles2.h>
 
-#include "draw.h"
-#include "gui.h"
-
-#define ENABLE_MULTITHREADING 0
-#if ENABLE_MULTITHREADING
-#include <pthread.h>
-#include <stdatomic.h>
-#endif
-
 #define IS_FULLSCREEN 0
 
 #define max(a,b) \
@@ -39,6 +30,16 @@
        __typeof__ (b) _b = (b); \
      _a < _b ? _a : _b; })
 #define M_PI    3.14159265358979323846264338327950288   /* pi */
+
+#include "draw.h"
+#include "gui.h"
+
+#define ENABLE_MULTITHREADING 0
+#if ENABLE_MULTITHREADING
+#include <pthread.h>
+#include <stdatomic.h>
+#endif
+
 
 #define windowSizeX    800
 #define windowSizeY    600
@@ -280,16 +281,22 @@ void water_update(fluid_t* fluid, float g, float l, float A, float friction, flo
 		}
     }
 
-    for(int y=1;y<MAPH-2;y++){
-		for(int x=1;x<MAPW-2;x++){
-			for(int i=-1;i<2;i++){
-				for(int j=-1;j<2;j++){
+    //Make sand move towards a max slope
+    int jMax, jMin, iMax, iMin;
+    for(int y=2;y<MAPH-1;y++){
+    	iMin = (y==2) ? 0 : -1;
+		iMax = (y==MAPW-2) ? 0 : 1;
+		for(int x=2;x<MAPW-1;x++){
+			jMin = (x==2) ? 0 : -1;
+			jMax = (x==MAPW-2) ? 0 : 1;
+			for(int i= iMin; i <= iMax; i++){
+				for(int j = jMin; j <= jMax; j++){
 					float slope = T[x+y*map.w]+map.sandTemp[x+y*map.w] - T[(x+j)+(y+i)*map.w]-map.sandTemp[(x+j)+(y+i)*map.w];
 					if(slope > 1.f){
-						float sandDiff = map.sandTemp[x+y*map.w] - map.sandTemp[(x+j)+(y+i)*map.w];
+						float sandDiff = min(slope, map.sandTemp[x+y*map.w]);//map.sandTemp[x+y*map.w] - map.sandTemp[(x+j)+(y+i)*map.w];
 //						if(map.water[(x+j)+(y+i)*map.w].depth < 0.1f || sandDiff > 8.f){
-							map.sandTemp[(x+j)+(y+i)*map.w] += sandDiff/4.f;
-							map.sandTemp[x+y*map.w] -= sandDiff/4.f;
+							map.sandTemp[(x+j)+(y+i)*map.w] += sandDiff/2.f;
+							map.sandTemp[x+y*map.w] -= sandDiff/2.f;
 //						}
 					}
 				}

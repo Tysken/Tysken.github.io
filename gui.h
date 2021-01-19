@@ -83,10 +83,14 @@ typedef struct{
 		SLIDER_TYPE_FLOAT,
 		SLIDER_TYPE_INT
 	}type;
+	enum{
+		SLIDER_IDLE,
+		SLIDER_HELD
+	}state;
 	int maxi, mini, defaulti;
 	float maxf, minf, defaultf;
-	float* linkedFloat;
-	int* linkedInt;
+	float* floatPtr;
+	int* intPtr;
 	char text[20];
 }slider_t;
 
@@ -107,6 +111,37 @@ struct{
 	widget_t widgetList[MAX_NO_WIDGETS];
 }gui;
 
+void gui_createSlider(char* text, int x, int y, int w, int h, int type, void* maxVal, void* minVal, void* valPtr){
+
+	slider_t* wPtr = (slider_t*)malloc(sizeof(slider_t));
+	//copy text
+	for(int i=0;i<20;i++){
+		wPtr->text[i] = text[i];
+	}
+	wPtr->x = x;
+	wPtr->y = y;
+	wPtr->w = w;
+	wPtr->h = h;
+	wPtr->type = type;
+	if(type == SLIDER_TYPE_INT){
+		wPtr->maxi   = *((int*)maxVal);
+		wPtr->mini   = *((int*)minVal);
+		wPtr->intPtr =  ((int*)valPtr);
+	}else if(type == SLIDER_TYPE_FLOAT){ //float
+		wPtr->maxf     = *((float*)maxVal);
+		wPtr->minf     = *((float*)minVal);
+		wPtr->floatPtr =  ((float*)valPtr);
+	}
+
+	wPtr->emptyColor = colorScheme[12]; //gray
+	wPtr->fillColor  = colorScheme[6];
+	wPtr->grabColor  = colorScheme[7];
+	wPtr->state = SLIDER_IDLE;
+
+	gui.widgetList[gui.nWidgets].widgetPtr = wPtr;
+	gui.widgetList[gui.nWidgets].type = SLIDER;
+	gui.nWidgets++;
+}
 
 void gui_createPressButton(char* text, int x, int y, int w, int h, void (*callback)(void)){
 
@@ -171,6 +206,35 @@ void gui_handleGUI(int mouseX, int mouseY, input_t* inputPtr){
 					buttonPtr->color = colorScheme[buttonPtr->colorFirst];
 				}
 			}	break;
+			case SLIDER:
+			{
+				slider_t* sliderPtr = ((slider_t*)(gui.widgetList[i].widgetPtr));
+				int x = sliderPtr->x;
+				int y = sliderPtr->y;
+				int w = sliderPtr->w;
+				int h = sliderPtr->h;
+				//check if mouse is inside slider
+				if(mouseX > x && mouseX < x+w && mouseY > y && mouseY < y+h){
+					if(inputPtr->mouse.left == KEY_PRESSED){
+						sliderPtr->state = SLIDER_HELD;
+					}
+				}
+
+				if(inputPtr->mouse.left == KEY_RELEASED && sliderPtr->state == SLIDER_HELD){
+					//release slider
+					sliderPtr->state = SLIDER_IDLE;
+				}
+
+				if(sliderPtr->state == SLIDER_HELD){
+					//move slider to pointer xPos
+					if(sliderPtr->type == SLIDER_TYPE_INT){
+						*(sliderPtr->intPtr)   = (float)(sliderPtr->maxi - sliderPtr->mini) * min(((float)(max(mouseX - x,0)) / (float)(w)),1.f);
+					}else if(sliderPtr->type == SLIDER_TYPE_FLOAT){
+						*(sliderPtr->floatPtr) = sliderPtr->minf + (float)(sliderPtr->maxf - sliderPtr->minf) * min(((float)(max(mouseX - x,0)) / (float)(w)),1.f);
+					}
+				}
+
+			}	break;
 			default:
 
 				break;
@@ -198,6 +262,45 @@ void gui_drawGUI(sdlTexture* texturePtr){
 					}
 					int txtLength = strlen(buttonPtr->text);
 					print(texturePtr, buttonPtr->text, bx+bw/2-(txtLength*8/2), bh/2-4+by);
+
+				}	break;
+				case SLIDER:
+				{
+					slider_t* wPtr = ((slider_t*)(gui.widgetList[i].widgetPtr));
+					int sx = wPtr->x;
+					int sy = wPtr->y;
+					int sw = wPtr->w;
+					int sh = wPtr->h;
+					int endFill;
+					//find what portion is filled
+					if(wPtr->type == SLIDER_TYPE_INT){
+						endFill = (int)((float)sw * ((float)(*(wPtr->intPtr)   - wPtr->mini) / (float)(wPtr->maxi - wPtr->mini)));
+					}else if(wPtr->type == SLIDER_TYPE_FLOAT){
+						endFill = (int)((float)sw * ((float)(*(wPtr->floatPtr) - wPtr->minf) / (float)(wPtr->maxf - wPtr->minf)));
+					}
+					//draw slider
+					for(int y=sy;y<sy+sh;y++){
+						for(int x=sx;x<sx+endFill;x++){
+							texturePtr->pixels[x+y*texturePtr->w] = *((uint32_t*)(&(wPtr->fillColor))); //recast argb as uint32
+						}
+						for(int x=sx+endFill;x<sx+sw;x++){
+							texturePtr->pixels[x+y*texturePtr->w] = *((uint32_t*)(&(wPtr->emptyColor))); //recast argb as uint32
+						}
+					}
+					//draw grabber
+					for(int y=sy-4;y<=sy+sh+4;y++){
+						for(int x=sx+endFill-4;x<=sx+endFill+4;x++){
+							texturePtr->pixels[x+y*texturePtr->w] = *((uint32_t*)(&(wPtr->grabColor))); //recast argb as uint32
+						}
+					}
+
+					char printBuffer[30];
+					if(wPtr->type == SLIDER_TYPE_INT){
+						sprintf(printBuffer, "%s: %d", wPtr->text, *(wPtr->intPtr));
+					}else if(wPtr->type == SLIDER_TYPE_FLOAT){
+						sprintf(printBuffer, "%s: %.2f", wPtr->text, *(wPtr->floatPtr));
+					}
+					print(texturePtr, printBuffer, sx, sy - sh - 10);
 
 				}	break;
 				default:

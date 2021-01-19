@@ -597,9 +597,11 @@ void render(){
 	float camZoomDiv = 1.f / cam.zoom;
 
 
-	Uint32 rgb = (100 << 16) | (100 << 8) | (100);
 	for(int y=0;y<rendTexture.h;y++){
+			Uint32 rgb = (((102+y)>>2) << 16) | (((192+y)>>2) << 8) | ((229+y)>>2);
 		for(int x=0;x<rendTexture.w;x++){
+
+
 			frameBuffer[x + y*rendTexture.w] = rgb;
 		}
 	}
@@ -744,6 +746,7 @@ void toolSelectStone(void){
 	cursor.tool = TOOL_STONE;
 }
 
+float g_simSpeed = 1.f;
 void init(){
 	
 	keyboardState = SDL_GetKeyboardState(NULL); // get pointer to key states 
@@ -754,8 +757,8 @@ void init(){
 
 	//init camera position, the following will init camera to center overview a 256x256 map
 	//camera: x:336.321991 y:-93.287224 rot:1.570000 zoom:0.609125camera: x:327.101379 y:-84.052345 rot:1.570000 zoom:0.609125
-	g_cam.x = 336.321991;
-	g_cam.y = -93.287224;
+	g_cam.x = 221.321991;
+	g_cam.y = 21.287224;
 	g_cam.rot = 3.14f/2;
 	g_cam.zoom = 0.609125;
 
@@ -773,9 +776,9 @@ void init(){
 	memset(&foam,0,sizeof(foam));
 	foam.size = FOAMSIZE;
 
-    for(int y=1;y<MAPH-1;y++){
-        for(int x=1;x<MAPW-1;x++){
-        	map.stone[x+y*map.w] = 20.f + (float)x/10.f;
+    for(int y=0;y<MAPH;y++){
+        for(int x=0;x<MAPW;x++){
+        	map.stone[x+y*map.w] = 20.f + 0*(float)x/4.f;
         	map.sand[x+y*map.w] = 0.f;
 
         	map.argb[x+y*map.w].r = 80;
@@ -787,10 +790,19 @@ void init(){
     }
 
     //create GUI
-    gui_createPressButton("Water", 20, 20, 160, 50, &toolSelectWater);
-    gui_createPressButton("Sand",  20, 90, 160, 50, &toolSelectSand);
-    gui_createPressButton( "Stone",20, 160, 160, 50, &toolSelectStone);
+    gui_createPressButton("Water", 20,  20, 160, 50, &toolSelectWater);
+    gui_createPressButton("Sand",  20,  90, 160, 50, &toolSelectSand);
+    gui_createPressButton("Stone", 20, 160, 160, 50, &toolSelectStone);
 
+    float radiusMax = 32.f;
+    float radiusMin = 1.f;
+    float amountMax = 1.f;
+    float amountMin = 0.01f;
+    float simSpeedMin = 0.1f;
+    float simSpeedMax = 2.0f;
+    gui_createSlider("Radius", 20, 300, 160, 10, SLIDER_TYPE_FLOAT, &radiusMax, &radiusMin, &(cursor.radius));
+    gui_createSlider("Amount", 20, 340, 160, 10, SLIDER_TYPE_FLOAT, &amountMax, &amountMin, &(cursor.amount));
+    gui_createSlider("Sim speed", 20, 380, 160, 10, SLIDER_TYPE_FLOAT, &simSpeedMax, &simSpeedMin, &(g_simSpeed));
 }
 
 
@@ -839,29 +851,33 @@ void updateInput(){
 	cursor.worldX  = pos.x;
 	cursor.worldY  = pos.y;
 
-	gui_handleGUI(cursor.screenX - 600 , cursor.screenY, &input);
+	gui_handleGUI(cursor.screenX - rendererSizeX , cursor.screenY, &input);
 
 	switch(SDL_mouseState){
 	case SDL_BUTTON_LEFT:
 	{
 		float radius = cursor.radius;
-		for(int j=-radius;j<=radius;j++){
-			for(int k=-radius;k<=radius;k++){
-				if(cursor.worldX+k >= 0 && cursor.worldY+j >= 0 && cursor.worldX+k < map.w && cursor.worldY+j < map.h){	
+		for(int j=-radius*4;j<=radius*4;j++){
+			for(int k=-radius*4;k<=radius*4;k++){
 //					map.water[4+5*(cursor.worldX+k)+(cursor.worldY+j)*map.w*5] +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
 					switch(cursor.tool){
 					case TOOL_WATER:
-						map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						if(cursor.worldX+k >= 3 && cursor.worldY+j >= 3 && cursor.worldX+k < map.w-2 && cursor.worldY+j < map.h-2){
+							map.water[(cursor.worldX+k)+(cursor.worldY+j)*map.w].depth +=  cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						}
 						break;
 					case TOOL_SAND:
-						map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						if(cursor.worldX+k >= 2 && cursor.worldY+j >= 2 && cursor.worldX+k < map.w-1 && cursor.worldY+j < map.h-1){
+							map.sand[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						}
 						break;
 					case TOOL_STONE:
-						map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						if(cursor.worldX+k >= 1 && cursor.worldY+j >= 1 && cursor.worldX+k < map.w-0 && cursor.worldY+j < map.h-0){
+							map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-((float)(k*k+j*j))/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
+						}
 						break;
 					}
 //					map.stone[cursor.worldX+k+(cursor.worldY+j)*map.w] += cursor.amount*radius*radius*exp(-(k*k+j*j)/(2.f*radius*radius))/(2*3.14159265359*radius*radius)*g_dtime_ms;
-				}
 			}
 		}
 	}
@@ -1021,7 +1037,7 @@ void process(){
 
 
 #if (ENABLE_MULTITHREADING == 0)
-	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, /*min(0.001f*g_dtime_ms, 0.15f)*/0.15f);
+	water_update(map.water, 9.81f, 1.f, 1.f, 0.99f, /*min(0.001f*g_dtime_ms, 0.15f)*/0.15f*g_simSpeed);
 #endif
 
 	static int timer_100ms = 0;
